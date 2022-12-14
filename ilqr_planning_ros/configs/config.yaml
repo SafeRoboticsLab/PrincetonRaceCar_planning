@@ -1,7 +1,7 @@
 ################################ ROS Topics that the planner subscribes to ################################
-odometry_topic:       "/perception/odometry"
+odometry_topic:       "/tagslam_ros_node/slam_pose"
 path_topic:           "/planning/path"
-obstacles_topic:      "/prediction/obstacles" 
+obstacle_topic:      "/prediction/obstacles" 
 
 ################################ ROS Topics that the planner publishes to ################################
 control_topic:        "/control/control"
@@ -17,6 +17,15 @@ path_loop:           true      # if true, the path is looped
 
 ############################################ Planning parameters ###########################################
 replan_dt:            0.1       # time between replaning [s]
+ilqr_params_file:     "configs/ilqr.yaml" # file containing the parameters for the iLQR solver
+
+T_axis_to_cam:        [0.0, -1.0, 0.0, 0.06, # camera center offset
+                       0.0, 0.0, -1.0, 0.0,
+                       1.0, 0.0, 0.0, -0.157, #wheelbase
+                       0.0, 0.0, 0.0, 1.0] # camera to rear axis transform
 
 ########################################### Control parameters ##############################################
 d_open_loop: [-0.0146, 0.0874, -0.0507, 0.0005, -0.0332, 0.1869, 0.0095, 0.0170, -0.0583, 0.0388]
+
+
+

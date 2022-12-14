@@ -1,0 +1,12 @@
+<launch>
+    <arg name="output"            default="screen"    doc="display output to screen or log file"/>
+    <arg name="NameSpace"  default="nx14" doc="name space of the ros nodes"/>
+    <arg name="config_file" default="$(find traj_planning_ros)/configs/config.yaml" doc="config file for the node"/>
+
+    <group ns="$(arg NameSpace)">
+        <rosparam command="load" file="$(arg config_file)" ns="traj_planning" />
+        <node pkg="traj_planning_ros" type="traj_planning_node.py" name="traj_planning" output="$(arg output)">
+            <param name='package_path' value="$(find traj_planning_ros)"/>
+        </node>
+    </group>
+</launch>

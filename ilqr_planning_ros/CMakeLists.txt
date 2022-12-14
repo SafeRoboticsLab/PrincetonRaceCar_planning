@@ -8,17 +8,17 @@ project(traj_planning_ros)
 ## if COMPONENTS list like find_package(catkin REQUIRED COMPONENTS xyz)
 ## is used, also find other catkin packages
 find_package(catkin REQUIRED COMPONENTS
-  rospy std_msgs rc_control_msgs traj_msgs
+  rospy std_msgs #rc_control_msgs traj_msgs
 )
 
 ## System dependencies are found with CMake's conventions
 # find_package(Boost REQUIRED COMPONENTS system)
 
 
-## Uncomment this if the package has a setup.py. This macro ensures
-## modules and global scripts declared therein get installed
-## See http://ros.org/doc/api/catkin/html/user_guide/setup_dot_py.html
-# catkin_python_setup()
+# Uncomment this if the package has a setup.py. This macro ensures
+# modules and global scripts declared therein get installed
+# See http://ros.org/doc/api/catkin/html/user_guide/setup_dot_py.html
+catkin_python_setup()
 
 ################################################
 ## Declare ROS messages, services and actions ##
@@ -104,7 +104,7 @@ find_package(catkin REQUIRED COMPONENTS
 catkin_package(
 #  INCLUDE_DIRS include
 #  LIBRARIES yolact_ros
-   CATKIN_DEPENDS rospy std_msgs rc_control_msgs 
+   CATKIN_DEPENDS rospy std_msgs #rc_control_msgs 
 #  DEPENDS system_lib
 )
 catkin_install_python(PROGRAMS scripts/traj_planning_node.py
