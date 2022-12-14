@@ -14,8 +14,6 @@ from .iLQR import Policy, Path
 from .utils import RealtimeBuffer
 from princeton_racecar_msgs.msg import ServoMsg, OdomMsg, PathMsg, ObstacleMsg, TrajMsg
 
-
-        
 class Planning_MPC():
 
     def __init__(self):
