@@ -8,7 +8,9 @@ project(traj_planning_ros)
 ## if COMPONENTS list like find_package(catkin REQUIRED COMPONENTS xyz)
 ## is used, also find other catkin packages
 find_package(catkin REQUIRED COMPONENTS
-  rospy std_msgs #rc_control_msgs traj_msgs
+  rospy 
+  std_msgs
+  princeton_racecar_msgs
 )
 
 ## System dependencies are found with CMake's conventions
@@ -104,11 +106,9 @@ catkin_python_setup()
 catkin_package(
 #  INCLUDE_DIRS include
 #  LIBRARIES yolact_ros
-   CATKIN_DEPENDS rospy std_msgs #rc_control_msgs 
+   CATKIN_DEPENDS rospy std_msgs princeton_racecar_msgs 
 #  DEPENDS system_lib
 )
-catkin_install_python(PROGRAMS scripts/traj_planning_node.py
-			DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION})
 
 ###########
 ## Build ##
@@ -161,10 +161,10 @@ include_directories(
 
 ## Mark executable scripts (Python etc.) for installation
 ## in contrast to setup.py, you can choose the destination
-# install(PROGRAMS
-#   scripts/my_python_script
-#   DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
-# )
+install(PROGRAMS
+  scripts/traj_planning_node.py
+  DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
+)
 
 ## Mark executables and/or libraries for installation
 # install(TARGETS ${PROJECT_NAME} ${PROJECT_NAME}_node
