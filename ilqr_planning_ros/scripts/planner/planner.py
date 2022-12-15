@@ -12,7 +12,7 @@ from scipy.spatial.transform import Rotation as R
 # from .iLQR import Policy, Path
 from .utils import RealtimeBuffer, get_ros_param
 
-# from princeton_racecar_msgs.msg import ServoMsg, OdomMsg, PathMsg, ObstacleMsg, TrajMsg
+# from racecar_msgs.msg import ServoMsg, OdomMsg, PathMsg, ObstacleMsg, TrajMsg
 # https://wiki.ros.org/rospy_tutorials/Tutorials/numpy
 from rospy.numpy_msg import numpy_msg
 from nav_msgs.msg import Odometry
