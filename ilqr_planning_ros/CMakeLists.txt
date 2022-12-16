@@ -10,7 +10,7 @@ project(traj_planning_ros)
 find_package(catkin REQUIRED COMPONENTS
   rospy 
   std_msgs
-  princeton_racecar_msgs
+  racecar_msgs
 )
 
 ## System dependencies are found with CMake's conventions
@@ -106,7 +106,7 @@ catkin_python_setup()
 catkin_package(
 #  INCLUDE_DIRS include
 #  LIBRARIES yolact_ros
-   CATKIN_DEPENDS rospy std_msgs princeton_racecar_msgs 
+   CATKIN_DEPENDS rospy std_msgs racecar_msgs 
 #  DEPENDS system_lib
 )
 
