@@ -97,9 +97,16 @@ class Path:
 
         if self.loop:
             self.track_bound[:, -1] = self.track_bound[:, 0]
+            
+    def get_reference(self, points: np.ndarray,
+        normalize_progress: Optional[bool] = False) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+        
+        closest_pt, slope, s = self.get_closest_pts(points, normalize_progress)
+        
+        return np.concatenate([closest_pt, slope, s], axis=0)
 
     def get_closest_pts(self, points: np.ndarray,
-                        normalize_progress: Optional[bool] = False) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+        normalize_progress: Optional[bool] = False) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
         """
         Gets the closest points on the centerline, the slope of their tangent
         lines, and the progress given the points in the global frame.
@@ -241,3 +248,5 @@ class Path:
         )
 
     # endregion
+    
+    

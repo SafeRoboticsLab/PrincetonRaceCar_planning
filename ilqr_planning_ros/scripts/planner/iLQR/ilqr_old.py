@@ -10,46 +10,39 @@ from jaxlib.xla_extension import DeviceArray
 from .dynamics import Bicycle5D
 from .cost import Cost
 from .path import Path
-from .config import Config
 
 
 class iLQR():
 
-	def __init__(self, config_file: str) -> None:
-
-		self.config = Config()  # Load default config.
-		self.config.load(config_file)  # Load config from file.
-		
-		self.dyn = Bicycle5D(self.config)
-		self.cost = Cost(self.config)
-		self.path = None
-		
+	def __init__(
+			self, id: str, config, dyn: Bicycle5D, cost: Cost, path: Path,
+			**kwargs
+	) -> None:
+		self.id = id
+		self.config = config
+		self.dyn = copy.deepcopy(dyn)
+		self.cost = copy.deepcopy(cost)
+		self.path = copy.deepcopy(path)
 
 		# iLQR parameters
-		self.dim_x = self.config.num_dim_x
-		self.dim_u = self.config.num_dim_u
-		self.n = self.config.n
-		self.max_iter = self.config.max_iter
+		self.dim_x = dyn.dim_x
+		self.dim_u = dyn.dim_u
+		self.N = config.N
+		self.max_iter = config.MAX_ITER
 		self.tol = 1e-3  # ILQR update tolerance.
-		self.eps = 1e-6  # Numerical issue for Quu inverse.
+		self.eps = getattr(config, "EPS", 1e-6)  # Numerical issue for Quu inverse.
 
 		# Stepsize scheduler.
 		self.alphas = 0.9**(np.arange(30))
-		self.horizon_indices = jnp.arange(self.n).reshape(1, -1)
+		self.horizon_indices = jnp.arange(self.N).reshape(1, -1)
 
-	def update_path(self, path: Path):
-		self.path = path
-
-	def plan(
-			self, init_state: np.ndarray, controls: Optional[np.ndarray] = None) -> np.ndarray:
+	def get_action(
+			self, controls: Optional[np.ndarray] = None, **kwargs
+	) -> np.ndarray:
 		status = 0
-		'''
-		Main iLQR loop.
-		Args:
-			init_state: [num_dim_x] np.ndarray: initial state.
-			control: [num_dim_u, N] np.ndarray: initial control.
-		'''
 
+		# `controls` include control input at timestep N-1, which is a dummy
+		# control of zeros.
 		if controls is None:
 			controls = jnp.zeros((self.dim_u, self.N))
 		else:
@@ -133,7 +126,7 @@ class iLQR():
 			self, nominal_states: DeviceArray, nominal_controls: DeviceArray,
 			K_closed_loop: DeviceArray, k_open_loop: DeviceArray, alpha: float
 	) -> Tuple[DeviceArray, DeviceArray, float, DeviceArray, DeviceArray,
-			DeviceArray]:
+						 DeviceArray]:
 		X, U = self.rollout(
 				nominal_states, nominal_controls, K_closed_loop, k_open_loop, alpha
 		)
