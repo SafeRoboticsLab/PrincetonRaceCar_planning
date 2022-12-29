@@ -7,7 +7,7 @@ from jax import numpy as jnp
 import numpy as np
 
 from .base_cost import BaseCost
-from .base_cost import quadratic_cost, huber_cost
+from .base_cost import quadratic_cost, huber_cost, exp_linear_cost
 
 def raise_error(cost_type, cost_name):
     raise NotImplementedError(
@@ -42,11 +42,20 @@ class StateCost(BaseCost):
         else:
             raise_error(config.vel_cost_type, 'VEL_COST')
         
+        # Lateral Acceleration Cost
+        self.wheelbase = config.wheelbase
+        self.lat_accel_thres = config.lat_accel_thres #float
+        self.lat_accel_a = config.lat_accel_a # float
+        self.lat_accel_b = config.lat_accel_b # float
+        self.lat_accel_cost_func = exp_linear_cost
         
-        self.weight = jnp.array(config.ctrl_cost_weight) # shape of (dim_u)
+        # Progress Cost
+        self.dim_progress = config.dim_progress
+        self.progress_weight = config.progress_weight/(config.n * config.dt)
     
+
     @partial(jax.jit, static_argnums=(0,))
-    def get_stage_cost(self, state, ctrl, ref, time_idx):
+    def get_running_cost(self, state, ctrl, ref, time_idx):
         '''
         Given a state, control, and time index, return the cost.
         Input:
@@ -66,15 +75,23 @@ class StateCost(BaseCost):
         path_dev = sr * (state[0] - closest_pt_x) - cr *(state[1] - closest_pt_y)
         path_cost = self.path_cost_func(path_dev, self.path_weight, self.path_delta)
         
+        # Progress cost
+        # This is always zero due to the way the closest point is calculated
+        # However, it will help us to calculate the gradient of the cost function
+        progress_cost = -self.progress_weight*(cr*(state[0] - closest_pt_x) + sr*(state[1] - closest_pt_y))
+        
+        # jax.debug.print('progress_cost: {x}',  x = progress_cost)
         # Cost for the vehicle's deviation from the reference velocity
         vel_ref = ref[self.dim_vel_ref]
         vel_dev = state[2] - vel_ref
         vel_cost = self.vel_cost_func(vel_dev, self.vel_weight, self.vel_delta)
         
-        # jax.debug.print("step {i}, vel: {v}, vel_ref: {r}, vel_cost: {y}",
-        #                 i = time_idx, v = state[2],  r = vel_ref, y = vel_cost)
+        # Cost for the vehicle's lateral acceleration
+        lat_accel = jnp.abs(state[2]**2 / self.wheelbase * jnp.tan(state[4])) \
+                        - self.lat_accel_thres
         
+        lat_accel_cost = self.lat_accel_cost_func(lat_accel,
+                                    self.lat_accel_a,
+                                    self.lat_accel_b)
         
-        return path_cost + vel_cost
-    
-    
+        return path_cost + vel_cost + lat_accel_cost + progress_cost

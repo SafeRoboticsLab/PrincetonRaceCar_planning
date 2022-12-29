@@ -24,7 +24,7 @@ class ControlCost(BaseCost):
                 'Please choose from [quadratic, huber]'
                 )
     @partial(jax.jit, static_argnums=(0,))
-    def get_stage_cost(
+    def get_running_cost(
 			self, state: DeviceArray, ctrl: DeviceArray, ref: DeviceArray, time_idx: int
 	) -> float:
         '''

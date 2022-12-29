@@ -13,7 +13,7 @@ class BaseCost(ABC):
 		super().__init__()
 
 	@abstractmethod
-	def get_stage_cost(
+	def get_running_cost(
 			self, state: DeviceArray, ctrl: DeviceArray, ref: DeviceArray, time_idx: int
 	) -> float:
 		'''
@@ -29,23 +29,6 @@ class BaseCost(ABC):
 		raise NotImplementedError
 
 	@partial(jax.jit, static_argnums=(0,))
-	def get_cost(
-			self, states: DeviceArray, ctrls: DeviceArray, refs: DeviceArray, time_indices: DeviceArray
-	) -> DeviceArray:
-		'''
-		Given a state, control, and time index, return the cost.
-		Input:
-			states: (dim_x, N) List of states
-			ctrls: (dim_u, N) List of controls
-			refs: (dim_ref, N) List of references
-			time_indices: (1, N) List of time indices
-		return:
-			cost: (N)
-		'''
-		return jax.vmap(self.get_stage_cost,
-						in_axes=(1, 1, 1, 1))(states, ctrls, refs, time_indices)
-
-	@partial(jax.jit, static_argnums=(0,))
 	def get_traj_cost(
 			self, states: DeviceArray, ctrls: DeviceArray, refs: DeviceArray, time_indices: DeviceArray
 	) -> float:
@@ -59,9 +42,24 @@ class BaseCost(ABC):
 		return:
 			cost: float
 		'''
-		costs = jax.vmap(self.get_stage_cost,
+		running_costs = jax.vmap(self.get_running_cost,
 						in_axes=(1, 1, 1, 1))(states, ctrls, refs, time_indices)
-		return jnp.sum(costs).astype(float)
+		terminal_cost = self.get_terminal_cost(refs)
+		return jnp.sum(running_costs).astype(float) + terminal_cost
+
+	# Note: We assume that the Cost is in the Lagrange problem form. 
+	# That is the Terminal cost is 0 
+	# A little bit abusing the notation, but it is convenient for the implementation,
+	# We assume there might be a "state/control independent" terminal cost.
+	# In this case, we need to careful convert it to the Lagrange form and add it to the running cost.
+	# See progress cost of State Cost for an example.
+
+	@classmethod
+	@partial(jax.jit, static_argnums=(0,))
+	def get_terminal_cost(
+			self, ref: DeviceArray
+	) -> float:
+		return 0
 
 	@partial(jax.jit, static_argnums=(0,))
 	def get_cx(
@@ -77,7 +75,7 @@ class BaseCost(ABC):
 		return:
 			dc_dx: (dim_x, N)
 		'''
-		_cx = jax.jacfwd(self.get_stage_cost, argnums=0)
+		_cx = jax.jacfwd(self.get_running_cost, argnums=0)
 		return jax.vmap(_cx, in_axes=(1, 1, 1, 1),
 					out_axes=1)(states, ctrls, refs, time_indices)
 
@@ -96,7 +94,7 @@ class BaseCost(ABC):
 			dc_du: (dim_u, N)
 		'''
 
-		_cu = jax.jacfwd(self.get_stage_cost, argnums=1)
+		_cu = jax.jacfwd(self.get_running_cost, argnums=1)
 		return jax.vmap(_cu, in_axes=(1, 1, 1, 1),
 					out_axes=1)(states, ctrls, refs, time_indices)
 
@@ -114,7 +112,7 @@ class BaseCost(ABC):
 		return:
 			d^2c_dx^2: (dim_x, dim_x, N)
 		'''
-		_cxx = jax.jacfwd(jax.jacrev(self.get_stage_cost, argnums=0), argnums=0)
+		_cxx = jax.jacfwd(jax.jacrev(self.get_running_cost, argnums=0), argnums=0)
 		return jax.vmap(_cxx, in_axes=(1, 1, 1, 1),
 					out_axes=2)(states, ctrls, refs, time_indices)
 
@@ -132,7 +130,7 @@ class BaseCost(ABC):
 		return:
 			d^2c_du^2: (dim_u, dim_u, N)
 		'''
-		_cuu = jax.jacfwd(jax.jacrev(self.get_stage_cost, argnums=1), argnums=1)
+		_cuu = jax.jacfwd(jax.jacrev(self.get_running_cost, argnums=1), argnums=1)
 		return jax.vmap(_cuu, in_axes=(1, 1, 1, 1),
 					out_axes=2)(states, ctrls, refs, time_indices)
 
@@ -150,7 +148,7 @@ class BaseCost(ABC):
 		return:
 			d^2c_dux: (dim_u, dim_x, N)
 		'''
-		_cux = jax.jacfwd(jax.jacrev(self.get_stage_cost, argnums=1), argnums=0)
+		_cux = jax.jacfwd(jax.jacrev(self.get_running_cost, argnums=1), argnums=0)
 		return jax.vmap(_cux, in_axes=(1, 1, 1, 1),
 					out_axes=2)(states, ctrls, refs, time_indices)
 
@@ -194,31 +192,33 @@ class BarrierCost(BaseCost):
 		self.q2 = q2
 		self.cost = cost
 
-	def get_stage_cost(
+	def get_running_cost(
 		self, states: DeviceArray, ctrls: DeviceArray, time_idx: DeviceArray
 	) -> DeviceArray:
-		_cost = self.cost.get_stage_cost(states, ctrls, time_idx)
+		_cost = self.cost.get_running_cost(states, ctrls, time_idx)
 		return self.q1 * jnp.exp(
 			self.q2 * jnp.clip(a=_cost, a_min=self.clip_min, a_max=self.clip_max)
 		)
 
-@partial(jax.jit, static_argnums=(0,))
-
+@jax.jit
 def exp_linear_cost(
-		y: Union[float, DeviceArray], a: Union[float, DeviceArray] = 1
+		y: Union[float, DeviceArray], a: Union[float, DeviceArray] = 1,
+		b: Union[float, DeviceArray] = 1
     ) -> Union[float, DeviceArray]:
 	'''
 	Base Class of Exponential Linear Cost defined as following
 	Take y = func(x, u, t) 
-		c(x, u, t) = a*exp(y) if y <=0
-		c(x, u, t) = a*y+a if y > 0
+		z = a*y
+		c(x, u, t) = b*exp(z) if z <=0
+		c(x, u, t) = b*z+b if z > 0
 	
 	Args:
 		y: float or 1D array, value to be costed
 		a: float or 1D array, coefficient of exponential linear cost
 		
 	'''
-	return jnp.where(y <= 0, a * jnp.exp(y), a * y + a)
+	z = a * y
+	return jnp.where(z <= 0, b * jnp.exp(z), b * z + b)
 
 @jax.jit
 def quadratic_cost(

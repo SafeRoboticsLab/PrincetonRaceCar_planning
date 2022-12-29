@@ -11,7 +11,7 @@ from .dynamics import Bicycle5D
 from .cost import Cost
 from .path import Path
 from .config import Config
-
+import time 
 
 class iLQR():
 
@@ -33,10 +33,19 @@ class iLQR():
 		self.dt = self.config.dt
 		self.max_iter = self.config.max_iter
 		self.tol = 1e-3  # ILQR update tolerance.
-		self.eps = 1e-6  # Numerical issue for Quu inverse.
 
-		# Stepsize scheduler.
-		self.alphas = 0.9**(np.arange(30))
+		# line search parameters.
+		self.alphas = self.config.line_search_a**(np.arange(0, 
+                                                self.config.line_search_a,
+                                                self.config.line_search_c)
+                                            )
+
+		# regularization parameters
+		self.reg_min = self.config.reg_min
+		self.reg_max = self.config.reg_max
+		self.reg_scale_up = self.config.reg_scale_up
+		self.reg_scale_down = self.config.reg_scale_down
+		self.reg_init = self.config.reg_init
 		self.horizon_indices = jnp.arange(self.n).reshape(1, -1)
 
 	def update_path(self, path: Path):
@@ -65,9 +74,12 @@ class iLQR():
 
 		refs = jnp.array(self.path.get_reference(states[:2, :]))
 
-		J = self.cost.get_traj_cost(states, controls, refs, self.horizon_indices)
+		# t0 = time.time()
+		J = self.cost.get_traj_cost(states, controls, refs, self.horizon_indices).block_until_ready()
+		# print("get traj cost time: ", time.time() - t0)
 
 		converged = False
+		reg = self.reg_init
 		time0 = time.time()
 		for _ in range(self.max_iter):
 			# print("Iteration: ", i)
@@ -78,7 +90,7 @@ class iLQR():
 			# We on;y need dynamics derivatives (A and B matrics) from 0 to N-2.
 			fx, fu = self.dyn.get_jacobian(states[:, :-1], controls[:, :-1])
 			K_closed_loop, k_open_loop = self.backward_pass(
-					c_x=c_x, c_u=c_u, c_xx=c_xx, c_uu=c_uu, c_ux=c_ux, fx=fx, fu=fu
+					c_x=c_x, c_u=c_u, c_xx=c_xx, c_uu=c_uu, c_ux=c_ux, fx=fx, fu=fu, reg = reg
 			)
 			updated = False
 			for alpha in self.alphas:
@@ -89,7 +101,7 @@ class iLQR():
 						)
 				)
 				if J_new < J:  # Improved!
-					# print("updated to ", J_new, " from ", J)
+					# print("updated to ", J_new, " from ", J , " with alpha ", alpha, " and reg ", reg)
 					if np.abs((J-J_new) / J) < self.tol:  # Small improvement.
 						converged = True
 
@@ -99,11 +111,15 @@ class iLQR():
 					controls = U_new
 					refs = refs_new
 					updated = True
-					
+					reg = max(self.reg_min, reg*self.reg_scale_down)
+
 					break
 
 			# Terminates early if there is no update within alphas.
 			if not updated:
+				reg *= self.reg_scale_up
+
+			if reg > self.reg_max:
 				status = 2
 				break
 
@@ -141,7 +157,8 @@ class iLQR():
 	@partial(jax.jit, static_argnums=(0,))
 	def backward_pass(
 			self, c_x: DeviceArray, c_u: DeviceArray, c_xx: DeviceArray,
-			c_uu: DeviceArray, c_ux: DeviceArray, fx: DeviceArray, fu: DeviceArray
+			c_uu: DeviceArray, c_ux: DeviceArray, fx: DeviceArray, fu: DeviceArray,
+			reg: float = 1e-6
 	) -> Tuple[DeviceArray, DeviceArray]:
 		"""
 		Jitted backward pass looped computation.
@@ -186,7 +203,7 @@ class iLQR():
 		ks = jnp.zeros((self.dim_u, self.n - 1))
 		V_x = c_x[:, -1]
 		V_xx = c_xx[:, :, -1]
-		reg_mat = self.eps * jnp.eye(self.dim_u)
+		reg_mat = reg * jnp.eye(self.dim_u)
 
 		V_x, V_xx, ks, Ks = jax.lax.fori_loop(
 				0, self.n - 1, backward_pass_looper, (V_x, V_xx, ks, Ks)
