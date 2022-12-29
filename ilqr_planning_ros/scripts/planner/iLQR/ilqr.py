@@ -15,10 +15,11 @@ from .config import Config
 
 class iLQR():
 
-	def __init__(self, config_file: str) -> None:
+	def __init__(self, config_file = None) -> None:
 
 		self.config = Config()  # Load default config.
-		self.config.load(config_file)  # Load config from file.
+		if config_file is not None:
+			self.config.load(config_file)  # Load config from file.
 		
 		self.dyn = Bicycle5D(self.config)
 		self.cost = Cost(self.config)
@@ -29,6 +30,7 @@ class iLQR():
 		self.dim_x = self.config.num_dim_x
 		self.dim_u = self.config.num_dim_u
 		self.n = self.config.n
+		self.dt = self.config.dt
 		self.max_iter = self.config.max_iter
 		self.tol = 1e-3  # ILQR update tolerance.
 		self.eps = 1e-6  # Numerical issue for Quu inverse.
@@ -40,8 +42,8 @@ class iLQR():
 	def update_path(self, path: Path):
 		self.path = path
 
-	def plan(
-			self, init_state: np.ndarray, controls: Optional[np.ndarray] = None) -> np.ndarray:
+	def plan(self, init_state: np.ndarray, 
+				controls: Optional[np.ndarray] = None) -> Dict:
 		status = 0
 		'''
 		Main iLQR loop.
@@ -51,50 +53,43 @@ class iLQR():
 		'''
 
 		if controls is None:
-			controls = jnp.zeros((self.dim_u, self.N))
+			controls = jnp.zeros((self.dim_u, self.n))
 		else:
-			assert controls.shape[1] == self.N
+			assert controls.shape[1] == self.n
 			controls = jnp.array(controls)
 
 		# Rolls out the nominal trajectory and gets the initial cost.
 		#* This is differnet from the naive iLQR as it relies on the information
 		#* from the pyspline.
-		states, controls = self.rollout_nominal(
-				jnp.array(kwargs.get('state')), controls
-		)
-		closest_pt, slope, theta = self.path.get_closest_pts(
-				np.asarray(states[:2, :])
-		)
-		closest_pt = jnp.array(closest_pt)
-		slope = jnp.array(slope)
-		theta = jnp.array(theta)
-		J = self.cost.get_traj_cost(
-				states, controls, closest_pt, slope, theta,
-				time_indices=self.horizon_indices
-		)
+		states, controls = self.dyn.rollout_nominal(jnp.array(init_state), controls)
+
+		refs = jnp.array(self.path.get_reference(states[:2, :]))
+
+		J = self.cost.get_traj_cost(states, controls, refs, self.horizon_indices)
 
 		converged = False
 		time0 = time.time()
-		for i in range(self.max_iter):
+		for _ in range(self.max_iter):
+			# print("Iteration: ", i)
 			# We need cost derivatives from 0 to N-1, but we only need dynamics
 			# jacobian from 0 to N-2.
 			c_x, c_u, c_xx, c_uu, c_ux = self.cost.get_derivatives(
-					states, controls, closest_pt, slope, theta,
-					time_indices=self.horizon_indices
-			)
+								states, controls, refs, self.horizon_indices)
+			# We on;y need dynamics derivatives (A and B matrics) from 0 to N-2.
 			fx, fu = self.dyn.get_jacobian(states[:, :-1], controls[:, :-1])
 			K_closed_loop, k_open_loop = self.backward_pass(
 					c_x=c_x, c_u=c_u, c_xx=c_xx, c_uu=c_uu, c_ux=c_ux, fx=fx, fu=fu
 			)
 			updated = False
 			for alpha in self.alphas:
-				X_new, U_new, J_new, closest_pt_new, slope_new, theta_new = (
+				# print("alpha: ", alpha)
+				X_new, U_new, J_new, refs_new = (
 						self.forward_pass(
 								states, controls, K_closed_loop, k_open_loop, alpha
 						)
 				)
-
 				if J_new < J:  # Improved!
+					# print("updated to ", J_new, " from ", J)
 					if np.abs((J-J_new) / J) < self.tol:  # Small improvement.
 						converged = True
 
@@ -102,10 +97,9 @@ class iLQR():
 					J = J_new
 					states = X_new
 					controls = U_new
-					closest_pt = closest_pt_new
-					slope = slope_new
-					theta = theta_new
+					refs = refs_new
 					updated = True
+					
 					break
 
 			# Terminates early if there is no update within alphas.
@@ -125,9 +119,9 @@ class iLQR():
 				k_open_loop=np.asarray(k_open_loop), t_process=t_process,
 				status=status, J=J, c_x=np.asarray(c_x), c_u=np.asarray(c_u),
 				c_xx=np.asarray(c_xx), c_uu=np.asarray(c_uu), c_ux=np.asarray(c_ux),
-				fx=np.asarray(fx), fu=np.asarray(fu)
+				fx=np.asarray(fx), fu=np.asarray(fu), N = self.n, dt = self.dt
 		)
-		return np.asarray(controls[:, 0]), solver_info
+		return solver_info
 
 	def forward_pass(
 			self, nominal_states: DeviceArray, nominal_controls: DeviceArray,
@@ -139,59 +133,10 @@ class iLQR():
 		)
 		#* This is differnet from the naive iLQR as it relies on the information
 		#* from the pyspline. Thus, it cannot be used with jit.
-		closest_pt, slope, theta = self.path.get_closest_pts(np.asarray(X[:2, :]))
-		closest_pt = jnp.array(closest_pt)
-		slope = jnp.array(slope)
-		theta = jnp.array(theta)
-		J = self.cost.get_traj_cost(
-				X, U, closest_pt, slope, theta, time_indices=self.horizon_indices
-		)
-		return X, U, J, closest_pt, slope, theta
 
-	@partial(jax.jit, static_argnums=(0,))
-	def rollout(
-			self, nominal_states: DeviceArray, nominal_controls: DeviceArray,
-			K_closed_loop: DeviceArray, k_open_loop: DeviceArray, alpha: float
-	) -> Tuple[DeviceArray, DeviceArray]:
-
-		@jax.jit
-		def _rollout_step(i, args):
-			X, U = args
-			u_fb = jnp.einsum(
-					"ik,k->i", K_closed_loop[:, :, i], (X[:, i] - nominal_states[:, i])
-			)
-			u = nominal_controls[:, i] + alpha * k_open_loop[:, i] + u_fb
-			x_nxt, u_clip = self.dyn.integrate_forward_jax(X[:, i], u)
-			X = X.at[:, i + 1].set(x_nxt)
-			U = U.at[:, i].set(u_clip)
-			return X, U
-
-		X = jnp.zeros((self.dim_x, self.N))
-		U = jnp.zeros((self.dim_u, self.N))  #  Assumes the last ctrl are zeros.
-		X = X.at[:, 0].set(nominal_states[:, 0])
-
-		X, U = jax.lax.fori_loop(0, self.N - 1, _rollout_step, (X, U))
-		return X, U
-
-	@partial(jax.jit, static_argnums=(0,))
-	def rollout_nominal(
-			self, initial_state: DeviceArray, controls: DeviceArray
-	) -> Tuple[DeviceArray, DeviceArray]:
-
-		@jax.jit
-		def _rollout_nominal_step(i, args):
-			X, U = args
-			x_nxt, u_clip = self.dyn.integrate_forward_jax(X[:, i], U[:, i])
-			X = X.at[:, i + 1].set(x_nxt)
-			U = U.at[:, i].set(u_clip)
-			return X, U
-
-		X = jnp.zeros((self.dim_x, self.N))
-		X = X.at[:, 0].set(initial_state)
-		X, U = jax.lax.fori_loop(
-				0, self.N - 1, _rollout_nominal_step, (X, controls)
-		)
-		return X, U
+		refs = jnp.array(self.path.get_reference(X[:2, :]))
+		J = self.cost.get_traj_cost(X, U, refs, self.horizon_indices)
+		return X, U, J, refs
 
 	@partial(jax.jit, static_argnums=(0,))
 	def backward_pass(
@@ -218,7 +163,7 @@ class iLQR():
 		@jax.jit
 		def backward_pass_looper(i, _carry):
 			V_x, V_xx, ks, Ks = _carry
-			n = self.N - 2 - i
+			n = self.n - 2 - i
 
 			Q_x = c_x[:, n] + fx[:, :, n].T @ V_x
 			Q_u = c_u[:, n] + fu[:, :, n].T @ V_x
@@ -237,13 +182,40 @@ class iLQR():
 			return V_x, V_xx, ks, Ks
 
 		# Initializes.
-		Ks = jnp.zeros((self.dim_u, self.dim_x, self.N - 1))
-		ks = jnp.zeros((self.dim_u, self.N - 1))
+		Ks = jnp.zeros((self.dim_u, self.dim_x, self.n - 1))
+		ks = jnp.zeros((self.dim_u, self.n - 1))
 		V_x = c_x[:, -1]
 		V_xx = c_xx[:, :, -1]
 		reg_mat = self.eps * jnp.eye(self.dim_u)
 
 		V_x, V_xx, ks, Ks = jax.lax.fori_loop(
-				0, self.N - 1, backward_pass_looper, (V_x, V_xx, ks, Ks)
+				0, self.n - 1, backward_pass_looper, (V_x, V_xx, ks, Ks)
 		)
 		return Ks, ks
+
+
+	@partial(jax.jit, static_argnums=(0,))
+	def rollout(
+			self, nominal_states: DeviceArray, nominal_controls: DeviceArray,
+			K_closed_loop: DeviceArray, k_open_loop: DeviceArray, alpha: float
+	) -> Tuple[DeviceArray, DeviceArray]:
+
+		@jax.jit
+		def _rollout_step(i, args):
+			X, U = args
+			u_fb = jnp.einsum(
+					"ik,k->i", K_closed_loop[:, :, i], (X[:, i] - nominal_states[:, i])
+			)
+			u = nominal_controls[:, i] + alpha * k_open_loop[:, i] + u_fb
+			x_nxt, u_clip = self.dyn.integrate_forward_jax(X[:, i], u)
+			# jax.debug.print("{u}, {u_clip}", u = u, u_clip = u_clip)
+			X = X.at[:, i + 1].set(x_nxt)
+			U = U.at[:, i].set(u_clip)
+			return X, U
+
+		X = jnp.zeros((self.dim_x, self.n))
+		U = jnp.zeros((self.dim_u, self.n))  #  Assumes the last ctrl are zeros.
+		X = X.at[:, 0].set(nominal_states[:, 0])
+
+		X, U = jax.lax.fori_loop(0, self.n - 1, _rollout_step, (X, U))
+		return X, U

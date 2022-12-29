@@ -50,7 +50,7 @@ class StateCost(BaseCost):
         '''
         Given a state, control, and time index, return the cost.
         Input:
-            state: (dim_x) - [x, y, theta, v]
+            state: (dim_x) - [x, y, v, psi, delta]
             ctrl: (dim_u)
             ref: (dim_ref) reference 
             time_idx: int (1)
@@ -68,8 +68,12 @@ class StateCost(BaseCost):
         
         # Cost for the vehicle's deviation from the reference velocity
         vel_ref = ref[self.dim_vel_ref]
-        vel_dev = state[3] - vel_ref
+        vel_dev = state[2] - vel_ref
         vel_cost = self.vel_cost_func(vel_dev, self.vel_weight, self.vel_delta)
+        
+        # jax.debug.print("step {i}, vel: {v}, vel_ref: {r}, vel_cost: {y}",
+        #                 i = time_idx, v = state[2],  r = vel_ref, y = vel_cost)
+        
         
         return path_cost + vel_cost
     

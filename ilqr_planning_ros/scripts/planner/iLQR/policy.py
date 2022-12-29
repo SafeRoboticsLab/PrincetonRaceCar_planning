@@ -17,16 +17,16 @@ class Policy():
         '''
         Return the policy at time t
         '''
-        k = int(np.floor((t-self.t0).to_sec()/self.dt))
-        if k>= self.N:
+        i = int(np.floor((t-self.t0).to_sec()/self.dt))
+        if i>= self.N:
             rospy.logwarn("Try to retrive policy beyond horizon")
-            x_k = self.nominal_x[:,-1]
-            x_k[2:] = 0
-            u_k = np.zeros(2)
-            K_k = np.zeros((2,4))
+            x_i = self.nominal_x[:,-1]
+            x_i[2:] = 0 # set velocity to zero
+            u_i = np.zeros_like(self.nominal_u[:,0])
+            K_i = np.zeros_like(self.K[:,:,0])
         else:
-            x_k = self.nominal_x[:,k]
-            u_k = self.nominal_u[:,k]
-            K_k = self.K[:,:,k]
+            x_i = self.nominal_x[:,i]
+            u_i = self.nominal_u[:,i]
+            K_i = self.K[:,:,i]
 
-        return x_k, u_k, K_k
+        return x_i, u_i, K_i

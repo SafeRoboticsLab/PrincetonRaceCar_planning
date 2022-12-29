@@ -10,7 +10,7 @@ class Config():
         self.num_dim_u = 2
         self.n = 10 # horizon length
         self.dt = 0.1 # time step
-        self.max_iter = 100 # maximum number of iterations
+        self.max_iter = 10 # maximum number of iterations
         self.tol = 1e-3 # tolerance for the iLQR convergence
         
         ####################################################
@@ -22,13 +22,19 @@ class Config():
         self.delta_max = 0.35 # maximum steering angle
         self.delta_min = -0.35 # minimum steering angle
         
+        # velocity limits
+        self.v_max = 10.0 # maximum velocity
+        self.v_min = 0.0 # minimum velocity
+        
+        # turn rate limits
+        self.omega_min = -6.0 # minimum turn rate
+        self.omega_max = 6.0 # maximum turn rate
+        
         # acceleration limits
         self.a_max = 5.0 # maximum acceleration
         self.a_min = -5.0 # minimum acceleration
         
-        # velocity limits
-        self.v_max = 10.0 # maximum velocity
-        self.v_min = 0.0 # minimum velocity
+
         
         ####################################################
         ########## Parameters for iLQR COST ################
@@ -47,14 +53,14 @@ class Config():
         self.path_huber_delta = 1. # huber loss delta for path deviation cost
         
         # Velocity Cost
-        self.dim_vel_ref = 1 # dimension of reference velocity in the reference
+        self.dim_vel_ref = 3 # dimension of reference velocity in the reference
         self.vel_cost_type = 'quadratic' # 'quadratic' or 'huber'
         self.vel_weight = 1. # weight for the velocity cost
         self.vel_huber_delta = 1. # huber loss delta for velocity cost
         
         ########        Control Cost          ############
         self.ctrl_cost_type = 'quadratic' # 'quadratic' or 'huber'
-        self.ctrl_cost_weight = [1.,1.]
+        self.ctrl_cost_weight = [0.1,0.1]
         self.ctrl_cost_huber_delta = [1.,1.] # huber loss delta
         
         

@@ -7,10 +7,17 @@ from jax import numpy as jnp
 
 class Bicycle5D():
 
-	def __init__(self, config: Any, action_space: np.ndarray) -> None:
+	def __init__(self, config: Any) -> None:
 		"""
 		Implements the bicycle dynamics (for Princeton race car). The state is the
 		center of the rear axis.
+			State: [x, y, v, psi, delta]
+			Control: [accel, omega]
+			dx_k = v_k cos(psi_k)
+			dy_k = v_k sin(psi_k)
+			dv_k = accel_k
+			dpsi_k = v_k tan(delta_k) / L
+			ddelta_k = omega_k
 
 		Args:
 			config (Any): an object specifies configuration.
@@ -22,14 +29,24 @@ class Bicycle5D():
 
 		# load parameters
 		self.wheelbase: float = config.wheelbase  # vehicle chassis length
+
 		self.delta_min = config.delta_min
 		self.delta_max = config.delta_max
 		self.v_min = config.v_min
 		self.v_max = config.v_max
+
 		self.a_min = config.a_min
 		self.a_max = config.a_max
+		self.omega_min = config.omega_min
+		self.omega_max = config.omega_max
 
-		self.ctrl_space = jnp.array([[self.a_min, self.a_max],
+		self.ctrl_limits = jnp.array([[self.a_min, self.a_max],
+									[self.omega_min, self.omega_max]])
+
+		self.state_limits = jnp.array([[-jnp.inf, jnp.inf],
+									[-jnp.inf, jnp.inf],
+									[self.v_min, self.v_max],
+									[-jnp.inf, jnp.inf],
 									[self.delta_min, self.delta_max]])
 
 	def integrate_forward(
@@ -40,12 +57,12 @@ class Bicycle5D():
 		control input.
 
 		Args:
-			state (np.ndarray).
-			control (np.ndarray).
+			state (np.ndarray) [5].
+			control (np.ndarray) [2].
 
 		Returns:
-			np.ndarray: next state.
-			np.ndarray: clipped control.
+			np.ndarray: next state. [5]
+			np.ndarray: clipped control. [2]
 		"""
 		state_nxt, ctrl_clip = self.integrate_forward_jax(
 			jnp.array(state), jnp.array(control)
@@ -63,15 +80,17 @@ class Bicycle5D():
 			control (DeviceArray): [accel, omega].
 
 		Returns:
-			DeviceArray: next state.
-			DeviceArray: clipped control.
+			DeviceArray: next state. [5]
+			DeviceArray: clipped control. [2]
 		"""
 		# Clips the controller values between min and max accel and steer values.
-		ctrl_clip = jnp.clip(control, self.ctrl_space[:, 0], self.ctrl_space[:, 1])
+		ctrl_clip = jnp.clip(control, self.ctrl_limits[:, 0], self.ctrl_limits[:, 1])
 		state_nxt = self._integrate_forward(state, ctrl_clip)
 		state_nxt = state_nxt.at[3].set(
 			jnp.mod(state_nxt[3] + jnp.pi, 2 * jnp.pi) - jnp.pi
 		)
+		# Clip the state to the limits.
+		state_nxt = jnp.clip(state_nxt, self.state_limits[:, 0], self.state_limits[:, 1])
 		return state_nxt, ctrl_clip
 
 	@partial(jax.jit, static_argnums=(0,))
@@ -169,15 +188,15 @@ class Bicycle5D():
 		n = controls.shape[1]
 		@jax.jit
 		def _rollout_nominal_step(i, args):
-			X, U = args
-			x_nxt, u_clip = self.integrate_forward_jax(X[:, i], U[:, i])
-			X = X.at[:, i + 1].set(x_nxt)
-			U = U.at[:, i].set(u_clip)
-			return X, U
+			states, ctrls = args
+			x_nxt, u_clip = self.integrate_forward_jax(states[:, i], ctrls[:, i])
+			states = states.at[:, i + 1].set(x_nxt)
+			ctrls = ctrls.at[:, i].set(u_clip)
+			return states, ctrls
 
-		X = jnp.zeros((self.dim_x, n))
-		X = X.at[:, 0].set(initial_state)
-		X, U = jax.lax.fori_loop(
-				0, n - 1, _rollout_nominal_step, (X, controls)
+		states = jnp.zeros((self.dim_x, n))
+		states = states.at[:, 0].set(initial_state)
+		states, ctrls_clip = jax.lax.fori_loop(
+				0, n - 1, _rollout_nominal_step, (states, controls)
 		)
-		return X, U
+		return states, ctrls_clip

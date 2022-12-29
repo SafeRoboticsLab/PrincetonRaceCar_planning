@@ -25,6 +25,7 @@ class Cost(BaseCost):
         
         state_cost = self.state_cost.get_stage_cost(state, ctrl, ref, time_idx)
         control_cost = self.control_cost.get_stage_cost(state, ctrl, ref, time_idx)
+        # jax.debug.print("step {i}, state_cost: {x}, control_cost: {y}", i = time_idx, x = state_cost,  y = control_cost)
         
         return state_cost + control_cost
         
