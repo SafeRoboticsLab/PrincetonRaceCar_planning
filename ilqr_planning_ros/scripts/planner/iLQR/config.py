@@ -8,8 +8,8 @@ class Config():
         ####################################################
         self.num_dim_x = 5
         self.num_dim_u = 2
-        self.n = 10 # horizon length
-        self.dt = 0.1 # time step
+        self.n = 20 # horizon length
+        self.dt = 0.05 # time step
 
         
         ####################################################
@@ -26,8 +26,8 @@ class Config():
         
         # regularization parameters
         self.reg_min = 1e-6 # minimum regularization
-        self.reg_max = 1000 # maximum regularization
-        self.reg_init = 1.0
+        self.reg_max = 1e6 # maximum regularization
+        self.reg_init = 1
         self.reg_scale_up = 10.0 # scale up factor for regularization
         self.reg_scale_down = 0.5 # scale down factor for regularization
         
@@ -35,6 +35,7 @@ class Config():
         ############### Dynamics Parameters ################
         ####################################################
         self.wheelbase = 0.257 # wheelbase of the vehicle
+        self.radius = 0.13 # radius of the vehicle
         
         # steering angle limits
         self.delta_max = 0.35 # maximum steering angle
@@ -52,8 +53,6 @@ class Config():
         self.a_max = 5.0 # maximum acceleration
         self.a_min = -5.0 # minimum acceleration
         
-
-        
         ####################################################
         ########## Parameters for iLQR COST ################
         ####################################################
@@ -65,30 +64,42 @@ class Config():
         self.dim_closest_pt_y = 1 # dimension of closest point y in the reference
         self.dim_path_slope = 2 # dimension of path slope in the reference
         self.path_cost_type = 'huber' # 'quadratic' or 'huber'
-        self.path_weight = 2.0 # weight for the path deviation cost
-        self.path_huber_delta = 2.0 # huber loss delta for path deviation cost
+        self.path_weight = 4.0 # weight for the path deviation cost
+        self.path_huber_delta = 1.0 # huber loss delta for path deviation cost
         
         # Velocity Cost
         self.dim_vel_ref = 3 # dimension of reference velocity in the reference
-        self.vel_cost_type = 'quadratic' # 'quadratic' or 'huber'
-        self.vel_weight = 0.0 # weight for the velocity cost
-        self.vel_huber_delta = 1.0 # huber loss delta for velocity cost
+        self.vel_cost_type = 'huber' # 'quadratic' or 'huber'
+        self.vel_weight = 1.0 # weight for the velocity cost
+        self.vel_huber_delta = 0.5 # huber loss delta for velocity cost
         
         # Lateral Acceleration Cost
         # We use ExpLinearCost for lateral acceleration cost
         self.lat_accel_thres = 6.0 # threshold for lateral acceleration cost
-        self.lat_accel_a = 10.0 # parameter for lateral acceleration cost
+        self.lat_accel_a = 5.0 # parameter for lateral acceleration cost
         self.lat_accel_b = 1.0 # parameter for ExpLinear Cost
         
         # Progress Cost
         self.dim_progress = 4 # dimension of progress in the reference
-        self.progress_weight = 0.5 # weight for the progress cost
+        self.progress_weight = 2 # weight for the progress cost
         
         ########        Control Cost          ############
-        self.ctrl_cost_type = 'quadratic' # 'quadratic' or 'huber'
-        self.ctrl_cost_weight = [0.1,0.1]
-        self.ctrl_cost_huber_delta = [1.0,1.0] # huber loss delta
         
+        self.ctrl_cost_type = 'quadratic' # 'quadratic' or 'huber'
+        self.ctrl_cost_accel_weight = 0.1
+        self.ctrl_cost_steer_weight = 0.1
+        self.ctrl_cost_accel_huber_delta = 1.0 # huber loss delta
+        self.ctrl_cost_steer_huber_delta = 1.0 # huber loss delta
+        
+        ########        Obstacle Cost          ############
+        
+        self.dim_obs_x = 5 # dimension of obstacle x in the reference
+        self.dim_obs_y = 6 # dimension of obstacle y in the reference
+        self.dim_obs_radius = 7 # dimension of obstacle radius in the reference
+        
+        self.obs_a = 6.0 # parameter for obstacle cost
+        self.obs_b = 4.0 # parameter for ExpLinear Cost
+                
     def load_config(self, config_path):
         with open(config_path, 'r') as f:
             config_dict = yaml.load(f, Loader=yaml.FullLoader)

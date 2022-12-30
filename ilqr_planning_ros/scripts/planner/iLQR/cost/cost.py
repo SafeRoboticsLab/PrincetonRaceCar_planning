@@ -9,6 +9,7 @@ import numpy as np
 from .base_cost import BaseCost
 from .state_cost import StateCost
 from .control_cost import ControlCost
+from .obstacle_cost import ObstacleCost
 
 import time
 
@@ -18,6 +19,8 @@ class Cost(BaseCost):
         
         self.state_cost = StateCost(config)
         self.control_cost = ControlCost(config)
+        
+        self.obs_cost = ObstacleCost(config)
         
         # Progress Cost
         self.dim_progress = config.dim_progress
@@ -42,10 +45,11 @@ class Cost(BaseCost):
         pass
     
     @partial(jax.jit, static_argnums=(0,))
-    def get_running_cost(self, state, ctrl, ref, time_idx):
+    def get_running_cost(self, state, ctrl, ref):
         
-        state_cost = self.state_cost.get_running_cost(state, ctrl, ref, time_idx)
-        control_cost = self.control_cost.get_running_cost(state, ctrl, ref, time_idx)
+        state_cost = self.state_cost.get_running_cost(state, ctrl, ref)
+        control_cost = self.control_cost.get_running_cost(state, ctrl, ref)
+        obs_cost = self.obs_cost.get_running_cost(state, ctrl, ref)
         
-        return state_cost + control_cost
+        return state_cost + control_cost + obs_cost
         

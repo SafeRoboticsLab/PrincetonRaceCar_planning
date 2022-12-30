@@ -14,7 +14,7 @@ class BaseCost(ABC):
 
 	@abstractmethod
 	def get_running_cost(
-			self, state: DeviceArray, ctrl: DeviceArray, ref: DeviceArray, time_idx: int
+			self, state: DeviceArray, ctrl: DeviceArray, ref: DeviceArray
 	) -> float:
 		'''
 		Abstract method for computing the cost at a single timestep.
@@ -22,7 +22,6 @@ class BaseCost(ABC):
 			state: (dim_x)
 			ctrl: (dim_u)
 			ref: (dim_ref)
-			time_idx: int 
 		return:
 			cost: float
 		'''
@@ -30,7 +29,7 @@ class BaseCost(ABC):
 
 	@partial(jax.jit, static_argnums=(0,))
 	def get_traj_cost(
-			self, states: DeviceArray, ctrls: DeviceArray, refs: DeviceArray, time_indices: DeviceArray
+			self, states: DeviceArray, ctrls: DeviceArray, refs: DeviceArray
 	) -> float:
 		'''
 		Given a state, control, and time index, return the sum of the cost.
@@ -43,7 +42,7 @@ class BaseCost(ABC):
 			cost: float
 		'''
 		running_costs = jax.vmap(self.get_running_cost,
-						in_axes=(1, 1, 1, 1))(states, ctrls, refs, time_indices)
+						in_axes=(1, 1, 1))(states, ctrls, refs)
 		terminal_cost = self.get_terminal_cost(refs)
 		return jnp.sum(running_costs).astype(float) + terminal_cost
 
@@ -63,7 +62,7 @@ class BaseCost(ABC):
 
 	@partial(jax.jit, static_argnums=(0,))
 	def get_cx(
-			self, states: DeviceArray, ctrls: DeviceArray, refs: DeviceArray, time_indices: DeviceArray
+			self, states: DeviceArray, ctrls: DeviceArray, refs: DeviceArray
 	) -> DeviceArray:
 		'''
 		Given a state, control, and time index, return the jacobian of cost w.r.t the state.
@@ -76,12 +75,12 @@ class BaseCost(ABC):
 			dc_dx: (dim_x, N)
 		'''
 		_cx = jax.jacfwd(self.get_running_cost, argnums=0)
-		return jax.vmap(_cx, in_axes=(1, 1, 1, 1),
-					out_axes=1)(states, ctrls, refs, time_indices)
+		return jax.vmap(_cx, in_axes=(1, 1, 1),
+					out_axes=1)(states, ctrls, refs)
 
 	@partial(jax.jit, static_argnums=(0,))
 	def get_cu(
-			self, states: DeviceArray, ctrls: DeviceArray, refs: DeviceArray, time_indices: DeviceArray
+			self, states: DeviceArray, ctrls: DeviceArray, refs: DeviceArray
 	) -> DeviceArray:
 		'''
 		Given a state, control, and time index, return the jacobian of cost w.r.t the control.
@@ -95,12 +94,12 @@ class BaseCost(ABC):
 		'''
 
 		_cu = jax.jacfwd(self.get_running_cost, argnums=1)
-		return jax.vmap(_cu, in_axes=(1, 1, 1, 1),
-					out_axes=1)(states, ctrls, refs, time_indices)
+		return jax.vmap(_cu, in_axes=(1, 1, 1),
+					out_axes=1)(states, ctrls, refs)
 
 	@partial(jax.jit, static_argnums=(0,))
 	def get_cxx(
-			self, states: DeviceArray, ctrls: DeviceArray, refs: DeviceArray, time_indices: DeviceArray
+			self, states: DeviceArray, ctrls: DeviceArray, refs: DeviceArray
 	) -> DeviceArray:
 		'''
 		Given a state, control, and time index, return the hessian of cost w.r.t the state.
@@ -113,12 +112,12 @@ class BaseCost(ABC):
 			d^2c_dx^2: (dim_x, dim_x, N)
 		'''
 		_cxx = jax.jacfwd(jax.jacrev(self.get_running_cost, argnums=0), argnums=0)
-		return jax.vmap(_cxx, in_axes=(1, 1, 1, 1),
-					out_axes=2)(states, ctrls, refs, time_indices)
+		return jax.vmap(_cxx, in_axes=(1, 1, 1),
+					out_axes=2)(states, ctrls, refs)
 
 	@partial(jax.jit, static_argnums=(0,))
 	def get_cuu(
-			self, states: DeviceArray, ctrls: DeviceArray, refs: DeviceArray, time_indices: DeviceArray
+			self, states: DeviceArray, ctrls: DeviceArray, refs: DeviceArray
 	) -> DeviceArray:
 		'''
 		Given a state, control, and time index, return the hessian of cost w.r.t the control.
@@ -131,12 +130,12 @@ class BaseCost(ABC):
 			d^2c_du^2: (dim_u, dim_u, N)
 		'''
 		_cuu = jax.jacfwd(jax.jacrev(self.get_running_cost, argnums=1), argnums=1)
-		return jax.vmap(_cuu, in_axes=(1, 1, 1, 1),
-					out_axes=2)(states, ctrls, refs, time_indices)
+		return jax.vmap(_cuu, in_axes=(1, 1, 1),
+					out_axes=2)(states, ctrls, refs)
 
 	@partial(jax.jit, static_argnums=(0,))
 	def get_cux(
-			self, states: DeviceArray, ctrls: DeviceArray, refs: DeviceArray, time_indices: DeviceArray
+			self, states: DeviceArray, ctrls: DeviceArray, refs: DeviceArray
 	) -> DeviceArray:
 		'''
 		Given a state, control, and time index, return the hessian of cost w.r.t the control and state.
@@ -149,12 +148,12 @@ class BaseCost(ABC):
 			d^2c_dux: (dim_u, dim_x, N)
 		'''
 		_cux = jax.jacfwd(jax.jacrev(self.get_running_cost, argnums=1), argnums=0)
-		return jax.vmap(_cux, in_axes=(1, 1, 1, 1),
-					out_axes=2)(states, ctrls, refs, time_indices)
+		return jax.vmap(_cux, in_axes=(1, 1, 1),
+					out_axes=2)(states, ctrls, refs)
 
 	@partial(jax.jit, static_argnums=(0,))
 	def get_cxu(
-			self, states: DeviceArray, ctrls: DeviceArray, refs: DeviceArray, time_indices: DeviceArray
+			self, states: DeviceArray, ctrls: DeviceArray, refs: DeviceArray
 	) -> DeviceArray:
 		'''
 		Given a state, control, and time index, return the hessian of cost w.r.t the control and state.
@@ -166,38 +165,18 @@ class BaseCost(ABC):
 		return:
 			d^2c_dxu: (dim_x, dim_u, N)
 		'''
-		return self.get_cux(states, ctrls, refs, time_indices).T
+		return self.get_cux(states, ctrls, refs).T
 
 	@partial(jax.jit, static_argnums=(0,))
 	def get_derivatives(
-			self, states: DeviceArray, ctrls: DeviceArray, refs: DeviceArray, time_indices: DeviceArray
+			self, states: DeviceArray, ctrls: DeviceArray, refs: DeviceArray
 	) -> DeviceArray:
 		return (
-				self.get_cx(states, ctrls, refs, time_indices),
-				self.get_cu(states, ctrls, refs, time_indices),
-				self.get_cxx(states, ctrls, refs, time_indices),
-				self.get_cuu(states, ctrls, refs, time_indices),
-				self.get_cux(states, ctrls, refs, time_indices),
-		)
-
-class BarrierCost(BaseCost):
-	def __init__(
-		self, clip_min: float, clip_max: float, q1: float,
-		q2: float, cost: BaseCost
-	):
-		super().__init__()
-		self.clip_min = clip_min
-		self.clip_max = clip_max
-		self.q1 = q1
-		self.q2 = q2
-		self.cost = cost
-
-	def get_running_cost(
-		self, states: DeviceArray, ctrls: DeviceArray, time_idx: DeviceArray
-	) -> DeviceArray:
-		_cost = self.cost.get_running_cost(states, ctrls, time_idx)
-		return self.q1 * jnp.exp(
-			self.q2 * jnp.clip(a=_cost, a_min=self.clip_min, a_max=self.clip_max)
+				self.get_cx(states, ctrls, refs),
+				self.get_cu(states, ctrls, refs),
+				self.get_cxx(states, ctrls, refs),
+				self.get_cuu(states, ctrls, refs),
+				self.get_cux(states, ctrls, refs),
 		)
 
 @jax.jit

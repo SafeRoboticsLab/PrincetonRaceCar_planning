@@ -53,5 +53,7 @@ progress_weight: 0.1 # weight for the progress cost
 
 ########        Control Cost          ############
 ctrl_cost_type: 'quadratic' # 'quadratic' or 'huber'
-ctrl_cost_weight: [0.1,0.1]
-ctrl_cost_huber_delta: [1.,1.] # huber loss delta
+ctrl_cost_accel_weight: 0.1
+ctrl_cost_steer_weight: 0.1
+ctrl_cost_accel_huber_delta: 1.0 # huber loss delta
+ctrl_cost_steer_huber_delta: 1.0 # huber loss delta

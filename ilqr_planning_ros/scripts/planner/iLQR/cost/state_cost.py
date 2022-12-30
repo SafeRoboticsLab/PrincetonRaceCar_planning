@@ -55,7 +55,7 @@ class StateCost(BaseCost):
     
 
     @partial(jax.jit, static_argnums=(0,))
-    def get_running_cost(self, state, ctrl, ref, time_idx):
+    def get_running_cost(self, state, ctrl, ref):
         '''
         Given a state, control, and time index, return the cost.
         Input:
@@ -80,7 +80,6 @@ class StateCost(BaseCost):
         # However, it will help us to calculate the gradient of the cost function
         progress_cost = -self.progress_weight*(cr*(state[0] - closest_pt_x) + sr*(state[1] - closest_pt_y))
         
-        # jax.debug.print('progress_cost: {x}',  x = progress_cost)
         # Cost for the vehicle's deviation from the reference velocity
         vel_ref = ref[self.dim_vel_ref]
         vel_dev = state[2] - vel_ref

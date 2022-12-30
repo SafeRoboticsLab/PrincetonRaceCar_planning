@@ -14,7 +14,6 @@ from .config import Config
 import time 
 
 class iLQR():
-
 	def __init__(self, config_file = None) -> None:
 
 		self.config = Config()  # Load default config.
@@ -50,6 +49,8 @@ class iLQR():
 		self.reg_init = self.config.reg_init
 		self.horizon_indices = jnp.arange(self.n).reshape(1, -1)
 
+		# self.warm_up()
+
 	def update_path(self, path: Path):
 		self.path = path
 
@@ -77,7 +78,7 @@ class iLQR():
 		refs = jnp.array(self.path.get_reference(states[:2, :]))
 
 		# t0 = time.time()
-		J = self.cost.get_traj_cost(states, controls, refs, self.horizon_indices).block_until_ready()
+		J = self.cost.get_traj_cost(states, controls, refs).block_until_ready()
 		# print("get traj cost time: ", time.time() - t0)
 
 		converged = False
@@ -87,7 +88,7 @@ class iLQR():
 			# We need cost derivatives from 0 to N-1, but we only need dynamics
 			# jacobian from 0 to N-2.
 			c_x, c_u, c_xx, c_uu, c_ux = self.cost.get_derivatives(
-								states, controls, refs, self.horizon_indices)
+								states, controls, refs)
 			# We on;y need dynamics derivatives (A and B matrics) from 0 to N-2.
 			fx, fu = self.dyn.get_jacobian(states[:, :-1], controls[:, :-1])
 			K_closed_loop, k_open_loop = self.backward_pass(
@@ -95,14 +96,13 @@ class iLQR():
 			)
 			updated = False
 			for alpha in self.alphas:
-				# print("alpha: ", alpha)
 				X_new, U_new, J_new, refs_new = (
 						self.forward_pass(
 								states, controls, K_closed_loop, k_open_loop, alpha
 						)
 				)
 				if J_new < J:  # Improved!
-					# print("updated to ", J_new, " from ", J , " with alpha ", alpha, " and reg ", reg)
+					# print("Update from ", J, " to ", J_new, "reg: ", reg)
 					if np.abs((J-J_new) / J) < self.tol:  # Small improvement.
 						converged = True
 
@@ -152,7 +152,7 @@ class iLQR():
 		#* from the pyspline. Thus, it cannot be used with jit.
 
 		refs = jnp.array(self.path.get_reference(X[:2, :]))
-		J = self.cost.get_traj_cost(X, U, refs, self.horizon_indices)
+		J = self.cost.get_traj_cost(X, U, refs)
 		return X, U, J, refs
 
 	@partial(jax.jit, static_argnums=(0,))
@@ -211,7 +211,6 @@ class iLQR():
 		)
 		return Ks, ks
 
-
 	@partial(jax.jit, static_argnums=(0,))
 	def rollout(
 			self, nominal_states: DeviceArray, nominal_controls: DeviceArray,
@@ -237,3 +236,19 @@ class iLQR():
 
 		X, U = jax.lax.fori_loop(0, self.n - 1, _rollout_step, (X, U))
 		return X, U
+
+	def warm_up(self):
+		"""Warm up the jitted functions."""
+		
+		# Build a fake path as a 1 meter radius circle.
+		theta = np.linspace(0, 2 * jnp.pi, 100)
+		centerline = np.zeros([2, 100])
+		centerline[0,:] = 1 * np.cos(theta)
+		centerline[1,:] = 1 * np.sin(theta)
+
+		self.path = Path(centerline, 0.5, 0.5, True)
+		x_init = np.array([0.0, 1.0, 0, 0, 0])
+
+		self.plan(x_init)
+		self.path = None
+
