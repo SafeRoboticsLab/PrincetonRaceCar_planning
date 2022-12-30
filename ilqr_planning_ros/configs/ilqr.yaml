@@ -1,43 +1,57 @@
-################################################# ILQR parameters ###########################################
-wheelbase: 0.257 #[m]
-width: 0.2
-length: 0.5
+####################################################
+############### General Parameters #################
+####################################################
+num_dim_x: 5
+num_dim_u: 2
+n: 10 # horizon length
+dt: 0.1 # time step
 
-#### ILQR constraints #####
-# velocity
-v_max: 1 # max long vel [m/s]
-v_min: 0 #0.05 # min long vel [m/s]
+####################################################
+###########Optimization Parameters #################
+####################################################        
 
-# steering
-delta_min: -0.35  # minimum steering angle [rad]
-delta_max: 0.35  # maximum steering angle [rad]
+max_iter: 100 # maximum number of iterations
+tol: 1.0e-3 # tolerance for the iLQR convergence
 
-# linear acceleration
-a_min: -3.5
-a_max: 3.5
+# line search parameters
+# We assume line search parameter is a**np.arange(0, b, c)
+line_search_a: 0.1 # line search parameter a
+line_search_b: 5.0 # line search parameter b
+line_search_c: 0.5 # line search parameter c
 
-# lateral acceleration
-alat_max: 5.0
+# regularization parameters
+reg_min: 1.0e-6 # minimum regularization
+reg_max: 1000 # maximum regularization
+reg_init: 1.0
+reg_scale_up: 10 # scale up factor for regularization
+reg_scale_down: 0.5 # scale down factor for regularization
 
-#### ILQR weights #####
-w_vel: 2
-w_contour: 30
-w_theta: 0
-w_accel: 1
-w_delta: 5
+####################################################
+########## Parameters for iLQR COST ################
+####################################################
 
-# parameters for barrier functions
-q1_v: 0
-q2_v: 0
-q1_road: 5
-q2_road: 5
-q1_lat: 1
-q2_lat: 5
-q1_obs: 0
-q2_obs: 0
+########        State Cost          ############
 
-# ilqr parameters
-T: 2
-N: 11  # the number of planning steps
-max_itr: 50
+# Path Offset Cost
+path_cost_type: 'huber' # 'quadratic' or 'huber'
+path_weight: 5.0 # weight for the path deviation cost
+path_huber_delta: 5.0 # huber loss delta for path deviation cost
 
+# Velocity Cost
+vel_cost_type: 'quadratic' # 'quadratic' or 'huber'
+vel_weight: 0 # weight for the velocity cost
+vel_huber_delta: 1. # huber loss delta for velocity cost
+
+# Lateral Acceleration Cost
+# We use ExpLinearCost for lateral acceleration cost
+lat_accel_thres: 5.0 # threshold for lateral acceleration cost
+lat_accel_a: 10.0 # parameter for lateral acceleration cost
+lat_accel_b: 1.0 # parameter for ExpLinear Cost
+
+# Progress Cost
+progress_weight: 0.1 # weight for the progress cost
+
+########        Control Cost          ############
+ctrl_cost_type: 'quadratic' # 'quadratic' or 'huber'
+ctrl_cost_weight: [0.1,0.1]
+ctrl_cost_huber_delta: [1.,1.] # huber loss delta

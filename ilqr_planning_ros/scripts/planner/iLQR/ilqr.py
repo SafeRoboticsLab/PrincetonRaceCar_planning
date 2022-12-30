@@ -19,8 +19,10 @@ class iLQR():
 
 		self.config = Config()  # Load default config.
 		if config_file is not None:
-			self.config.load(config_file)  # Load config from file.
+			self.config.load_config(config_file)  # Load config from file.
 		
+		print(self.config)
+
 		self.dyn = Bicycle5D(self.config)
 		self.cost = Cost(self.config)
 		self.path = None
@@ -32,7 +34,7 @@ class iLQR():
 		self.n = self.config.n
 		self.dt = self.config.dt
 		self.max_iter = self.config.max_iter
-		self.tol = 1e-3  # ILQR update tolerance.
+		self.tol = self.config.tol  # ILQR update tolerance.
 
 		# line search parameters.
 		self.alphas = self.config.line_search_a**(np.arange(0, 
@@ -82,7 +84,6 @@ class iLQR():
 		reg = self.reg_init
 		time0 = time.time()
 		for _ in range(self.max_iter):
-			# print("Iteration: ", i)
 			# We need cost derivatives from 0 to N-1, but we only need dynamics
 			# jacobian from 0 to N-2.
 			c_x, c_u, c_xx, c_uu, c_ux = self.cost.get_derivatives(
