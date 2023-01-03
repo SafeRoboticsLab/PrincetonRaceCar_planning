@@ -37,19 +37,20 @@ class iLQR():
 
 		# line search parameters.
 		self.alphas = self.config.line_search_a**(np.arange(0, 
-                                                self.config.line_search_a,
+                                                self.config.line_search_b,
                                                 self.config.line_search_c)
                                             )
-
+		print(self.alphas)
 		# regularization parameters
 		self.reg_min = self.config.reg_min
 		self.reg_max = self.config.reg_max
+		self.reg_init = self.config.reg_init
 		self.reg_scale_up = self.config.reg_scale_up
 		self.reg_scale_down = self.config.reg_scale_down
-		self.reg_init = self.config.reg_init
+
 		self.horizon_indices = jnp.arange(self.n).reshape(1, -1)
 
-		# self.warm_up()
+		self.warm_up()
 
 	def update_path(self, path: Path):
 		self.path = path
@@ -63,7 +64,7 @@ class iLQR():
 			init_state: [num_dim_x] np.ndarray: initial state.
 			control: [num_dim_u, N] np.ndarray: initial control.
 		'''
-
+		
 		if controls is None:
 			controls = jnp.zeros((self.dim_u, self.n))
 		else:
@@ -77,59 +78,61 @@ class iLQR():
 
 		refs = jnp.array(self.path.get_reference(states[:2, :]))
 
-		# t0 = time.time()
-		J = self.cost.get_traj_cost(states, controls, refs).block_until_ready()
-		# print("get traj cost time: ", time.time() - t0)
-
+		J = self.cost.get_traj_cost(states, controls, refs)
+		time0 = time.time()
 		converged = False
 		reg = self.reg_init
-		time0 = time.time()
+
 		for _ in range(self.max_iter):
+			updated = False
 			# We need cost derivatives from 0 to N-1, but we only need dynamics
 			# jacobian from 0 to N-2.
 			c_x, c_u, c_xx, c_uu, c_ux = self.cost.get_derivatives(
 								states, controls, refs)
-			# We on;y need dynamics derivatives (A and B matrics) from 0 to N-2.
+			# We only need dynamics derivatives (A and B matrics) from 0 to N-2.
 			fx, fu = self.dyn.get_jacobian(states[:, :-1], controls[:, :-1])
-			K_closed_loop, k_open_loop = self.backward_pass(
+			while not updated and reg <= self.reg_max:
+				# Backward pass with new regularization.
+				K_closed_loop, k_open_loop = self.backward_pass(
 					c_x=c_x, c_u=c_u, c_xx=c_xx, c_uu=c_uu, c_ux=c_ux, fx=fx, fu=fu, reg = reg
-			)
-			updated = False
-			for alpha in self.alphas:
-				X_new, U_new, J_new, refs_new = (
-						self.forward_pass(
-								states, controls, K_closed_loop, k_open_loop, alpha
-						)
 				)
-				if J_new < J:  # Improved!
-					# print("Update from ", J, " to ", J_new, "reg: ", reg)
-					if np.abs((J-J_new) / J) < self.tol:  # Small improvement.
-						converged = True
+				# Line search through alphas.
+				for alpha in self.alphas:
+					X_new, U_new, J_new, refs_new = (
+							self.forward_pass(
+									states, controls, K_closed_loop, k_open_loop, alpha
+							)
+					)
+					
+					if J_new < J:  # Improved!
+						# Small improvement.
+						if np.abs(J-J_new) < self.tol:
+							converged = True
+						print("Update from ", J, " to ", J_new, "reg: ", reg, "alpha: ", alpha)
+						# Updates nominal trajectory and best cost.
+						J = J_new
+						states = X_new
+						controls = U_new
+						refs = refs_new
+						updated = True
+						reg = max(reg*self.reg_scale_down, self.reg_min)
+						break # break the for loop
+				
+				# If the line search fails, increase the regularization.
+				if not updated:
+					reg *= self.reg_scale_up
 
-					# Updates nominal trajectory and best cost.
-					J = J_new
-					states = X_new
-					controls = U_new
-					refs = refs_new
-					updated = True
-					reg = max(self.reg_min, reg*self.reg_scale_down)
-
-					break
-
-			# Terminates early if there is no update within alphas.
+			# if no line search succeeds, terminate.
 			if not updated:
-				reg *= self.reg_scale_up
-
-			if reg > self.reg_max:
 				status = 2
 				break
-
 			# Terminates early if the objective improvement is negligible.
 			if converged:
 				status = 1
 				break
-		t_process = time.time() - time0
 
+		t_process = time.time() - time0
+		
 		solver_info = dict(
 				states=np.asarray(states), controls=np.asarray(controls),
 				K_closed_loop=np.asarray(K_closed_loop),
@@ -150,7 +153,6 @@ class iLQR():
 		)
 		#* This is differnet from the naive iLQR as it relies on the information
 		#* from the pyspline. Thus, it cannot be used with jit.
-
 		refs = jnp.array(self.path.get_reference(X[:2, :]))
 		J = self.cost.get_traj_cost(X, U, refs)
 		return X, U, J, refs
@@ -159,7 +161,7 @@ class iLQR():
 	def backward_pass(
 			self, c_x: DeviceArray, c_u: DeviceArray, c_xx: DeviceArray,
 			c_uu: DeviceArray, c_ux: DeviceArray, fx: DeviceArray, fu: DeviceArray,
-			reg: float = 1e-6
+			reg: float
 	) -> Tuple[DeviceArray, DeviceArray]:
 		"""
 		Jitted backward pass looped computation.
@@ -225,7 +227,6 @@ class iLQR():
 			)
 			u = nominal_controls[:, i] + alpha * k_open_loop[:, i] + u_fb
 			x_nxt, u_clip = self.dyn.integrate_forward_jax(X[:, i], u)
-			# jax.debug.print("{u}, {u_clip}", u = u, u_clip = u_clip)
 			X = X.at[:, i + 1].set(x_nxt)
 			U = U.at[:, i].set(u_clip)
 			return X, U
@@ -247,8 +248,12 @@ class iLQR():
 		centerline[1,:] = 1 * np.sin(theta)
 
 		self.path = Path(centerline, 0.5, 0.5, True)
-		x_init = np.array([0.0, 1.0, 0, 0, 0])
+		x_init = np.array([0.0, -1.0, 1, 0, 0])
 
-		self.plan(x_init)
+		# import matplotlib.pyplot as plt
+		plan = self.plan(x_init)
+		# plt.plot(plan['states'][0,:], plan['states'][1,:])
+		print(f"Warm up takes {plan['t_process']} seconds.")
 		self.path = None
+	
 

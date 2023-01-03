@@ -52,5 +52,7 @@ class ObstacleCost(BaseCost):
         
         dis = (self.ego_radius + ref[self.dim_obs_radius]) - jnp.linalg.norm(circles_center - obs_center, axis=0)
         
+        obs_b = self.obs_b* jnp.maximum(state[2], 1)
+        # dis = dis / jnp.maximum(state[2], 0.1)
         # jax.debug.print("obs_cost: {x}", x=dis)
-        return jnp.sum(exp_linear_cost(dis, self.obs_a, self.obs_b))
+        return jnp.sum(exp_linear_cost(dis, self.obs_a, obs_b))

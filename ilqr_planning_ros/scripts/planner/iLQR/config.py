@@ -8,28 +8,30 @@ class Config():
         ####################################################
         self.num_dim_x = 5
         self.num_dim_u = 2
-        self.n = 20 # horizon length
-        self.dt = 0.05 # time step
+        self.n = 10 # horizon length
+        self.dt = 0.1 # time step
 
         
         ####################################################
         ###########Optimization Parameters #################
         ####################################################        
         self.max_iter = 100 # maximum number of iterations
-        self.tol = 1e-3 # tolerance for the iLQR convergence
+        # tolerance for the iLQR convergence
+        # Make sure this is smaller than the minimum line search step size
+        self.tol = 1e-3
         
         # line search parameters
         # We assume line search parameter is a**np.arange(0, b, c)
         self.line_search_a = 0.1 # line search parameter a
-        self.line_search_b = 5.0 # line search parameter b
-        self.line_search_c = 0.5 # line search parameter c
+        self.line_search_b = 3 # line search parameter b
+        self.line_search_c = 1 # line search parameter c
         
         # regularization parameters
-        self.reg_min = 1e-6 # minimum regularization
-        self.reg_max = 1e6 # maximum regularization
-        self.reg_init = 1
-        self.reg_scale_up = 10.0 # scale up factor for regularization
+        self.reg_min = 1e-3 # minimum regularization
+        self.reg_max = 1e5 # maximum regularization
         self.reg_scale_down = 0.5 # scale down factor for regularization
+        self.reg_scale_up = 5.0 # scale up factor for regularization
+        self.reg_init = 1 # initial regularization
         
         ####################################################
         ############### Dynamics Parameters ################
@@ -63,13 +65,13 @@ class Config():
         self.dim_closest_pt_x = 0 # dimension of closest point x in the reference
         self.dim_closest_pt_y = 1 # dimension of closest point y in the reference
         self.dim_path_slope = 2 # dimension of path slope in the reference
-        self.path_cost_type = 'huber' # 'quadratic' or 'huber'
-        self.path_weight = 4.0 # weight for the path deviation cost
-        self.path_huber_delta = 1.0 # huber loss delta for path deviation cost
+        self.path_cost_type = 'quadratic' # 'quadratic' or 'huber'
+        self.path_weight = 5.0 # weight for the path deviation cost
+        self.path_huber_delta = 2 # huber loss delta for path deviation cost
         
         # Velocity Cost
         self.dim_vel_ref = 3 # dimension of reference velocity in the reference
-        self.vel_cost_type = 'huber' # 'quadratic' or 'huber'
+        self.vel_cost_type = 'quadratic' # 'quadratic' or 'huber'
         self.vel_weight = 1.0 # weight for the velocity cost
         self.vel_huber_delta = 0.5 # huber loss delta for velocity cost
         
@@ -81,13 +83,14 @@ class Config():
         
         # Progress Cost
         self.dim_progress = 4 # dimension of progress in the reference
-        self.progress_weight = 2 # weight for the progress cost
+        self.progress_weight = 1.0  # weight for the progress cost
         
         ########        Control Cost          ############
         
         self.ctrl_cost_type = 'quadratic' # 'quadratic' or 'huber'
-        self.ctrl_cost_accel_weight = 0.1
-        self.ctrl_cost_steer_weight = 0.1
+        # those value should not be too small
+        self.ctrl_cost_accel_weight = 1
+        self.ctrl_cost_steer_weight = 1
         self.ctrl_cost_accel_huber_delta = 1.0 # huber loss delta
         self.ctrl_cost_steer_huber_delta = 1.0 # huber loss delta
         
@@ -97,8 +100,8 @@ class Config():
         self.dim_obs_y = 6 # dimension of obstacle y in the reference
         self.dim_obs_radius = 7 # dimension of obstacle radius in the reference
         
-        self.obs_a = 6.0 # parameter for obstacle cost
-        self.obs_b = 4.0 # parameter for ExpLinear Cost
+        self.obs_a = 10.0 # parameter for obstacle cost
+        self.obs_b = 5.0 # parameter for ExpLinear Cost
                 
     def load_config(self, config_path):
         with open(config_path, 'r') as f:

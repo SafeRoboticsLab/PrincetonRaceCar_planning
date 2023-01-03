@@ -179,6 +179,7 @@ class Bicycle5D():
 		jac = jax.jit(jax.vmap(_jac, in_axes=(1, 1), out_axes=(2, 2)))
 		return jac(nominal_states, nominal_controls)
 
+	@partial(jax.jit, static_argnums=(0,))
 	def rollout_nominal(
 			self, initial_state: DeviceArray, controls: DeviceArray
 	) -> Tuple[DeviceArray, DeviceArray]:
