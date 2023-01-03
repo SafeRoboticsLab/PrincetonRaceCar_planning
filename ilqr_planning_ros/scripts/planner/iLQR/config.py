@@ -66,13 +66,13 @@ class Config():
         self.dim_closest_pt_y = 1 # dimension of closest point y in the reference
         self.dim_path_slope = 2 # dimension of path slope in the reference
         self.path_cost_type = 'quadratic' # 'quadratic' or 'huber'
-        self.path_weight = 5.0 # weight for the path deviation cost
+        self.path_weight = 10.0 # weight for the path deviation cost
         self.path_huber_delta = 2 # huber loss delta for path deviation cost
         
         # Velocity Cost
         self.dim_vel_ref = 3 # dimension of reference velocity in the reference
         self.vel_cost_type = 'quadratic' # 'quadratic' or 'huber'
-        self.vel_weight = 1.0 # weight for the velocity cost
+        self.vel_weight = 2.0 # weight for the velocity cost
         self.vel_huber_delta = 0.5 # huber loss delta for velocity cost
         
         # Lateral Acceleration Cost
@@ -101,7 +101,7 @@ class Config():
         self.dim_obs_radius = 7 # dimension of obstacle radius in the reference
         
         self.obs_a = 10.0 # parameter for obstacle cost
-        self.obs_b = 5.0 # parameter for ExpLinear Cost
+        self.obs_b = 10.0 # parameter for ExpLinear Cost
                 
     def load_config(self, config_path):
         with open(config_path, 'r') as f:

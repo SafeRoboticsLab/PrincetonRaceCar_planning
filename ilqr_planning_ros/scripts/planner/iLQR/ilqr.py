@@ -30,10 +30,10 @@ class iLQR():
 		# iLQR parameters
 		self.dim_x = self.config.num_dim_x
 		self.dim_u = self.config.num_dim_u
-		self.n = self.config.n
-		self.dt = self.config.dt
-		self.max_iter = self.config.max_iter
-		self.tol = self.config.tol  # ILQR update tolerance.
+		self.n = int(self.config.n)
+		self.dt = float(self.config.dt)
+		self.max_iter = int(self.config.max_iter)
+		self.tol = float(self.config.tol)  # ILQR update tolerance.
 
 		# line search parameters.
 		self.alphas = self.config.line_search_a**(np.arange(0, 
@@ -42,13 +42,11 @@ class iLQR():
                                             )
 		print(self.alphas)
 		# regularization parameters
-		self.reg_min = self.config.reg_min
-		self.reg_max = self.config.reg_max
-		self.reg_init = self.config.reg_init
-		self.reg_scale_up = self.config.reg_scale_up
-		self.reg_scale_down = self.config.reg_scale_down
-
-		self.horizon_indices = jnp.arange(self.n).reshape(1, -1)
+		self.reg_min = float(self.config.reg_min)
+		self.reg_max = float(self.config.reg_max)
+		self.reg_init = float(self.config.reg_init)
+		self.reg_scale_up = float(self.config.reg_scale_up)
+		self.reg_scale_down = float(self.config.reg_scale_down)
 
 		self.warm_up()
 
@@ -108,7 +106,7 @@ class iLQR():
 						# Small improvement.
 						if np.abs(J-J_new) < self.tol:
 							converged = True
-						print("Update from ", J, " to ", J_new, "reg: ", reg, "alpha: ", alpha)
+						# print("Update from ", J, " to ", J_new, "reg: ", reg, "alpha: ", alpha)
 						# Updates nominal trajectory and best cost.
 						J = J_new
 						states = X_new

@@ -104,8 +104,8 @@ class Path:
         closest_pt, slope, s = self.get_closest_pts(points, normalize_progress)
         v_ref = np.ones_like(s)*3
         
-        obs_x = np.ones_like(s)*0.0
-        obs_y = np.ones_like(s)*5.4
+        obs_x = np.ones_like(s)*(-2.0)
+        obs_y = np.ones_like(s)*5.0
         obs_r = np.ones_like(s)*0.2
         
         return np.concatenate([closest_pt, slope, v_ref, s, obs_x, obs_y, obs_r], axis=0)
