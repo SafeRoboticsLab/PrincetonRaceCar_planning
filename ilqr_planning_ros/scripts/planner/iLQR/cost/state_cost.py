@@ -53,6 +53,21 @@ class StateCost(BaseCost):
         self.dim_progress = config.dim_progress
         self.progress_weight = config.progress_weight/(config.n * config.dt)
     
+    @partial(jax.jit, static_argnums=(0,))
+    def get_terminal_cost(
+			self, ref: DeviceArray
+	) -> float:
+        '''
+        Since the progress is calulate from PySpline,
+        it is intracable to make it work with JAX.
+        However, we can locally approximate the progress's derivative
+        with method described in the MPCC.
+        In this case, we can add a terminal cost to reward the total progress 
+        the vehicle has made.
+        '''
+        progress = ref[self.dim_progress,:]
+        return -self.progress_weight * (progress[-1] - progress[0])
+    
 
     @partial(jax.jit, static_argnums=(0,))
     def get_running_cost(self, state, ctrl, ref):

@@ -1,55 +1,58 @@
-from abc import ABC, abstractmethod
-from functools import partial
-from typing import Optional
-from jaxlib.xla_extension import DeviceArray
 import jax
 from jax import numpy as jnp
 import numpy as np
+from jaxlib.xla_extension import DeviceArray
 
-from .base_cost import BaseCost
 from .state_cost import StateCost
 from .control_cost import ControlCost
 from .obstacle_cost import ObstacleCost
 
 import time
 
-class Cost(BaseCost):
+class Cost():
     def __init__(self, config):
         super().__init__()
         
         self.state_cost = StateCost(config)
         self.control_cost = ControlCost(config)
-        
-        self.obs_cost = ObstacleCost(config)
-        
-        # Progress Cost
-        self.dim_progress = config.dim_progress
-        self.progress_weight = config.progress_weight/(config.n * config.dt)
-        
-    @partial(jax.jit, static_argnums=(0,))
-    def get_terminal_cost(
-			self, ref: DeviceArray
+        self.obstacle_cost = ObstacleCost(config)
+    
+    def get_traj_cost(
+			self, states: DeviceArray, ctrls: DeviceArray, refs: DeviceArray, obs_refs: DeviceArray = None
 	) -> float:
         '''
-        Since the progress is calulate from PySpline,
-        it is intracable to make it work with JAX.
-        However, we can locally approximate the progress's derivative
-        with method described in the MPCC.
-        In this case, we can add a terminal cost to reward the total progress 
-        the vehicle has made.
-        '''
-        progress = ref[self.dim_progress,:]
-        return -self.progress_weight * (progress[-1] - progress[0])
+		Given a state, control, and time index, return the sum of the cost.
+		Input:
+			states: (dim_x, N) List of states
+			ctrls: (dim_u, N) List of controls
+			refs: (dim_ref, N) List of references
+			time_indices: (1, N) List of time indices
+		return:
+			cost: float
+		'''
         
-    def update_obstacles(self, obstacles):
-        pass
-    
-    @partial(jax.jit, static_argnums=(0,))
-    def get_running_cost(self, state, ctrl, ref):
+        state_cost = self.state_cost.get_traj_cost(states, ctrls, refs)
+        control_cost = self.control_cost.get_traj_cost(states, ctrls, refs)
+        obstacle_cost = self.obstacle_cost.get_traj_cost(states, ctrls, obs_refs)
+
+        return state_cost + control_cost + obstacle_cost
+
+    def get_derivatives(
+			self, states: DeviceArray, ctrls: DeviceArray, refs: DeviceArray, obs_refs: DeviceArray = None
+	) -> DeviceArray:
+        # Get Jacobians and Hessians of each cost function then sum them up
         
-        state_cost = self.state_cost.get_running_cost(state, ctrl, ref)
-        control_cost = self.control_cost.get_running_cost(state, ctrl, ref)
-        obs_cost = self.obs_cost.get_running_cost(state, ctrl, ref)
+        (state_cx, state_cu, state_cxx, 
+            state_cuu, state_cux) = self.state_cost.get_derivatives(states, ctrls, refs)
         
-        return state_cost + control_cost + obs_cost
+        (ctrl_cx, ctrl_cu, ctrl_cxx,
+            ctrl_cuu, ctrl_cux) = self.control_cost.get_derivatives(states, ctrls, refs)
         
+        (obs_cx, obs_cu, obs_cxx, 
+            obs_cuu, obs_cux) = self.obstacle_cost.get_derivatives(states, ctrls, obs_refs)
+
+        return (state_cx + ctrl_cx + obs_cx,
+                state_cu + ctrl_cu + obs_cu,
+                state_cxx + ctrl_cxx + obs_cxx,
+                state_cuu + ctrl_cuu + obs_cuu,
+                state_cux + ctrl_cux + obs_cux)

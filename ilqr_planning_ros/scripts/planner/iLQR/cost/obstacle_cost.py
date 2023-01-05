@@ -7,23 +7,15 @@ import numpy as np
 
 from .base_cost import BaseCost
 from .base_cost import exp_linear_cost
-
-
-class ObstacleCost(BaseCost):
+class SingleObstacleCost(BaseCost):
     def __init__(self, config):
+        '''
+        Obtain the cost and its gradient w.r.t to a single obstacle given a state, control,
+        '''
         super().__init__()
         
-        # We hard code the ego agent as two circles centered at the front and rear axis of the vehicle
-        self.ego_circles_center = jnp.array([[0, config.wheelbase],
-                                                [0, 0]])
-        
-        self.ego_radius = config.radius
-
+                                                
         self.cost_func = exp_linear_cost
-        
-        self.dim_obs_x = config.dim_obs_x
-        self.dim_obs_y = config.dim_obs_y
-        self.dim_obs_radius = config.dim_obs_radius
         
         self.obs_a = config.obs_a
         self.obs_b = config.obs_b
@@ -37,7 +29,7 @@ class ObstacleCost(BaseCost):
         Input:
             state: (dim_x) state [x, y, v, psi, delta]
             ctrl: (dim_u) control
-            ref: (dim_ref) reference 
+            ref: (5,) obstacle reference 
             time_idx: int (1)
         return:
             cost: float
@@ -46,13 +38,62 @@ class ObstacleCost(BaseCost):
         rot_mat = jnp.array([[jnp.cos(psi), -jnp.sin(psi)],
                             [jnp.sin(psi), jnp.cos(psi)]])
         
-        circles_center = jnp.matmul(rot_mat, self.ego_circles_center) + state[:2].reshape(2, 1) #[2, 2]
+        ego_pt = ref[:2]
+        obs_pt = ref[2:4]
+        dis_ref = ref[4]
         
-        obs_center = jnp.array([[ref[self.dim_obs_x]], [ref[self.dim_obs_y]]])
+        ego_pt_global = jnp.matmul(rot_mat, ego_pt) + state[:2]
         
-        dis = (self.ego_radius + ref[self.dim_obs_radius]) - jnp.linalg.norm(circles_center - obs_center, axis=0)
+        dis = jnp.linalg.norm(obs_pt - ego_pt_global, axis=0)*jnp.sign(dis_ref)*-1.0
         
-        obs_b = self.obs_b* jnp.maximum(state[2], 1)
-        # dis = dis / jnp.maximum(state[2], 0.1)
-        # jax.debug.print("obs_cost: {x}", x=dis)
+        # jax.debug.print("Calculated distance: {x}, FCL distance: {y}", x=dis, y=dis_ref)
+        
+        obs_b = self.obs_b * jnp.maximum(state[2], 1)
+        
         return jnp.sum(exp_linear_cost(dis, self.obs_a, obs_b))
+    
+class ObstacleCost():
+    def __init__(self, config):
+        self.single_obstacle_cost = SingleObstacleCost(config)
+        
+    def get_traj_cost(
+			self, states: DeviceArray, ctrls: DeviceArray, obs_refs: DeviceArray
+	) -> float:
+        '''
+		Given a state, control, and time index, return the sum of the cost.
+		Input:
+			states: (dim_x, N) List of states
+			ctrls: (dim_u, N) List of controls
+			refs: (num_obstacle, dim_ref, N) List of references
+		return:
+			cost: float
+		'''
+        cost = 0
+        if obs_refs is not None:
+            num_obstacle = obs_refs.shape[0]
+            for i in range(num_obstacle):
+                cost += self.single_obstacle_cost.get_traj_cost(states, ctrls, obs_refs[i])
+        
+        return cost
+
+    def get_derivatives(
+            self, states: DeviceArray, ctrls: DeviceArray, obs_refs: DeviceArray
+    ) -> DeviceArray:
+        
+        cx = 0
+        cu = 0
+        cxx = 0
+        cuu = 0
+        cux = 0
+        
+        if obs_refs is not None:
+            num_obstacle = obs_refs.shape[0]
+            
+            for i in range(num_obstacle):
+                cx_, cu_, cxx_, cuu_, cux_ = self.single_obstacle_cost.get_derivatives(states, ctrls, obs_refs[i])
+                cx += cx_
+                cu += cu_
+                cxx += cxx_
+                cuu += cuu_
+                cux += cux_
+        return (cx, cu, cxx, cuu, cux)

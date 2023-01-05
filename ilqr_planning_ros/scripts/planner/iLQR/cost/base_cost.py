@@ -27,6 +27,21 @@ class BaseCost(ABC):
 		'''
 		raise NotImplementedError
 
+
+	# Note: We assume that the Cost is in the Lagrange problem form. 
+	# That is the Terminal cost is 0 
+	# A little bit abusing the notation, but it is convenient for the implementation,
+	# We assume there might be a "state/control independent" terminal cost.
+	# In this case, we need to careful convert it to the Lagrange form and add it to the running cost.
+	# See progress cost of State Cost for an example.
+
+	@classmethod
+	@partial(jax.jit, static_argnums=(0,))
+	def get_terminal_cost(
+			self, ref: DeviceArray
+	) -> float:
+		return 0
+
 	@partial(jax.jit, static_argnums=(0,))
 	def get_traj_cost(
 			self, states: DeviceArray, ctrls: DeviceArray, refs: DeviceArray
@@ -46,19 +61,17 @@ class BaseCost(ABC):
 		terminal_cost = self.get_terminal_cost(refs)
 		return jnp.sum(running_costs).astype(float) + terminal_cost
 
-	# Note: We assume that the Cost is in the Lagrange problem form. 
-	# That is the Terminal cost is 0 
-	# A little bit abusing the notation, but it is convenient for the implementation,
-	# We assume there might be a "state/control independent" terminal cost.
-	# In this case, we need to careful convert it to the Lagrange form and add it to the running cost.
-	# See progress cost of State Cost for an example.
-
-	@classmethod
 	@partial(jax.jit, static_argnums=(0,))
-	def get_terminal_cost(
-			self, ref: DeviceArray
-	) -> float:
-		return 0
+	def get_derivatives(
+			self, states: DeviceArray, ctrls: DeviceArray, refs: DeviceArray
+	) -> DeviceArray:
+		return (
+				self.get_cx(states, ctrls, refs),
+				self.get_cu(states, ctrls, refs),
+				self.get_cxx(states, ctrls, refs),
+				self.get_cuu(states, ctrls, refs),
+				self.get_cux(states, ctrls, refs),
+		)
 
 	@partial(jax.jit, static_argnums=(0,))
 	def get_cx(
@@ -167,17 +180,6 @@ class BaseCost(ABC):
 		'''
 		return self.get_cux(states, ctrls, refs).T
 
-	@partial(jax.jit, static_argnums=(0,))
-	def get_derivatives(
-			self, states: DeviceArray, ctrls: DeviceArray, refs: DeviceArray
-	) -> DeviceArray:
-		return (
-				self.get_cx(states, ctrls, refs),
-				self.get_cu(states, ctrls, refs),
-				self.get_cxx(states, ctrls, refs),
-				self.get_cuu(states, ctrls, refs),
-				self.get_cux(states, ctrls, refs),
-		)
 
 @jax.jit
 def exp_linear_cost(

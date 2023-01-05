@@ -38,6 +38,8 @@ class Config():
         ####################################################
         self.wheelbase = 0.257 # wheelbase of the vehicle
         self.radius = 0.13 # radius of the vehicle
+        self.width = 0.22 # width of the vehicle
+        self.length = 0.40 # length of the vehicle
         
         # steering angle limits
         self.delta_max = 0.35 # maximum steering angle
@@ -66,7 +68,7 @@ class Config():
         self.dim_closest_pt_y = 1 # dimension of closest point y in the reference
         self.dim_path_slope = 2 # dimension of path slope in the reference
         self.path_cost_type = 'quadratic' # 'quadratic' or 'huber'
-        self.path_weight = 10.0 # weight for the path deviation cost
+        self.path_weight = 6.0 # weight for the path deviation cost
         self.path_huber_delta = 2 # huber loss delta for path deviation cost
         
         # Velocity Cost
@@ -83,7 +85,7 @@ class Config():
         
         # Progress Cost
         self.dim_progress = 4 # dimension of progress in the reference
-        self.progress_weight = 1.0  # weight for the progress cost
+        self.progress_weight = 2.0  # weight for the progress cost
         
         ########        Control Cost          ############
         
@@ -100,8 +102,8 @@ class Config():
         self.dim_obs_y = 6 # dimension of obstacle y in the reference
         self.dim_obs_radius = 7 # dimension of obstacle radius in the reference
         
-        self.obs_a = 10.0 # parameter for obstacle cost
-        self.obs_b = 10.0 # parameter for ExpLinear Cost
+        self.obs_a = 5.0 # parameter for obstacle cost
+        self.obs_b = 5.0 # parameter for ExpLinear Cost
                 
     def load_config(self, config_path):
         with open(config_path, 'r') as f:

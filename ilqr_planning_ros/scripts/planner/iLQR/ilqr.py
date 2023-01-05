@@ -8,7 +8,7 @@ from jax import numpy as jnp
 from jaxlib.xla_extension import DeviceArray
 
 from .dynamics import Bicycle5D
-from .cost import Cost
+from .cost import Cost, CollisionChecker, Obstacle
 from .path import Path
 from .config import Config
 import time 
@@ -20,10 +20,12 @@ class iLQR():
 		if config_file is not None:
 			self.config.load_config(config_file)  # Load config from file.
 		
-		print(self.config)
+		# print(self.config)
 
 		self.dyn = Bicycle5D(self.config)
 		self.cost = Cost(self.config)
+		self.collision_checker = CollisionChecker(self.config)
+		self.obstacle_list = []
 		self.path = None
 		
 
@@ -40,7 +42,7 @@ class iLQR():
                                                 self.config.line_search_b,
                                                 self.config.line_search_c)
                                             )
-		print(self.alphas)
+		# print(self.alphas)
 		# regularization parameters
 		self.reg_min = float(self.config.reg_min)
 		self.reg_max = float(self.config.reg_max)
@@ -53,8 +55,14 @@ class iLQR():
 	def update_path(self, path: Path):
 		self.path = path
 
+	def update_obstacles(self, vertices_list: list):
+		self.obstacle_list = []
+		for vertices in vertices_list:
+			self.obstacle_list.append(Obstacle(vertices))
+
 	def plan(self, init_state: np.ndarray, 
 				controls: Optional[np.ndarray] = None) -> Dict:
+		t_start = time.time()
 		status = 0
 		'''
 		Main iLQR loop.
@@ -75,9 +83,8 @@ class iLQR():
 		states, controls = self.dyn.rollout_nominal(jnp.array(init_state), controls)
 
 		refs = jnp.array(self.path.get_reference(states[:2, :]))
-
-		J = self.cost.get_traj_cost(states, controls, refs)
-		time0 = time.time()
+		obs_refs = self.collision_checker.check_collisions(states, self.obstacle_list)
+		J = self.cost.get_traj_cost(states, controls, refs, obs_refs)
 		converged = False
 		reg = self.reg_init
 
@@ -85,37 +92,44 @@ class iLQR():
 			updated = False
 			# We need cost derivatives from 0 to N-1, but we only need dynamics
 			# jacobian from 0 to N-2.
-			c_x, c_u, c_xx, c_uu, c_ux = self.cost.get_derivatives(
-								states, controls, refs)
+			t0 = time.time()
+			c_x, c_u, c_xx, c_uu, c_ux = self.cost.get_derivatives(states, controls, refs, obs_refs)
+			# print("get_derivatives time: ", time.time() - t0)
+			t0 = time.time()
 			# We only need dynamics derivatives (A and B matrics) from 0 to N-2.
 			fx, fu = self.dyn.get_jacobian(states[:, :-1], controls[:, :-1])
+			# print("get_jacobian: ", time.time() - t0)
 			while not updated and reg <= self.reg_max:
 				# Backward pass with new regularization.
+				t0 = time.time()
 				K_closed_loop, k_open_loop = self.backward_pass(
 					c_x=c_x, c_u=c_u, c_xx=c_xx, c_uu=c_uu, c_ux=c_ux, fx=fx, fu=fu, reg = reg
 				)
+				# print("Backward pass time: ", time.time() - t0)
 				# Line search through alphas.
 				for alpha in self.alphas:
-					X_new, U_new, J_new, refs_new = (
+					t0 = time.time()
+					X_new, U_new, J_new, refs_new, obs_refs_new = (
 							self.forward_pass(
 									states, controls, K_closed_loop, k_open_loop, alpha
 							)
 					)
-					
+					# print("Forward pass time: ", time.time() - t0)
 					if J_new < J:  # Improved!
 						# Small improvement.
-						if np.abs(J-J_new) < self.tol:
+						if np.abs(J-J_new)/max(1, np.abs(J)) < self.tol:
 							converged = True
-						# print("Update from ", J, " to ", J_new, "reg: ", reg, "alpha: ", alpha)
+						# print("Update from ", J, " to ", J_new, "reg: ", reg, "alpha: ", alpha, time.time()-t_start)
 						# Updates nominal trajectory and best cost.
 						J = J_new
 						states = X_new
 						controls = U_new
 						refs = refs_new
+						obs_refs = obs_refs_new
 						updated = True
 						reg = max(reg*self.reg_scale_down, self.reg_min)
 						break # break the for loop
-				
+						
 				# If the line search fails, increase the regularization.
 				if not updated:
 					reg *= self.reg_scale_up
@@ -128,9 +142,10 @@ class iLQR():
 			if converged:
 				status = 1
 				break
+			
 
-		t_process = time.time() - time0
-		
+		t_process = time.time() - t_start
+		# print(obs_refs[:,-1,:])
 		solver_info = dict(
 				states=np.asarray(states), controls=np.asarray(controls),
 				K_closed_loop=np.asarray(K_closed_loop),
@@ -151,9 +166,15 @@ class iLQR():
 		)
 		#* This is differnet from the naive iLQR as it relies on the information
 		#* from the pyspline. Thus, it cannot be used with jit.
+		# t0 = time.time()
 		refs = jnp.array(self.path.get_reference(X[:2, :]))
-		J = self.cost.get_traj_cost(X, U, refs)
-		return X, U, J, refs
+		# t1 = time.time()
+		obs_refs = self.collision_checker.check_collisions(X, self.obstacle_list)
+		# t2 = time.time()
+		J = self.cost.get_traj_cost(X, U, refs, obs_refs)
+		# # print("Cost time: ", t1-t0, t2-t1, time.time()-t2)
+
+		return X, U, J, refs, obs_refs
 
 	@partial(jax.jit, static_argnums=(0,))
 	def backward_pass(
@@ -246,12 +267,19 @@ class iLQR():
 		centerline[1,:] = 1 * np.sin(theta)
 
 		self.path = Path(centerline, 0.5, 0.5, True)
+
+		# add obstacle
+		obs = np.array([[0, 0, 0.5, 0.5], [1, 1.5, 1, 1.5]]).T
+		obs_list = [[obs for _ in range(self.n)]]
+		self.update_obstacles(obs_list)
+
 		x_init = np.array([0.0, -1.0, 1, 0, 0])
 
 		# import matplotlib.pyplot as plt
 		plan = self.plan(x_init)
 		# plt.plot(plan['states'][0,:], plan['states'][1,:])
-		print(f"Warm up takes {plan['t_process']} seconds.")
+		# print(f"Warm up takes {plan['t_process']} seconds.")
 		self.path = None
+		self.obstacle_list = []
 	
 
