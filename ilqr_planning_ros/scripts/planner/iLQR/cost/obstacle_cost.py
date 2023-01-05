@@ -44,13 +44,20 @@ class SingleObstacleCost(BaseCost):
         
         ego_pt_global = jnp.matmul(rot_mat, ego_pt) + state[:2]
         
-        dis = jnp.linalg.norm(obs_pt - ego_pt_global, axis=0)*jnp.sign(dis_ref)*-1.0
+        diff = obs_pt - ego_pt_global
+
+        # handle the case when distance is 0 (when the obstacle touch each other)
+        # THis leads to nan in the gradient
+        dis = jnp.linalg.norm(diff)
+        y = jnp.where(dis >= 1e-4, dis, 1e-4)
+
+        y= -1*jnp.sign(dis_ref)*y   
+
+        # Do not calculate gradient w.r.t velocity
+        v_no_grad = jax.lax.stop_gradient(state[2])
+        obs_b = self.obs_b#*jnp.maximum(v_no_grad, 1)
         
-        # jax.debug.print("Calculated distance: {x}, FCL distance: {y}", x=dis, y=dis_ref)
-        
-        obs_b = self.obs_b * jnp.maximum(state[2], 1)
-        
-        return jnp.sum(exp_linear_cost(dis, self.obs_a, obs_b))
+        return exp_linear_cost(y, self.obs_a, obs_b)
     
 class ObstacleCost():
     def __init__(self, config):

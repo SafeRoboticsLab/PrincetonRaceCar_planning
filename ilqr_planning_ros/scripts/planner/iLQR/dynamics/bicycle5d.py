@@ -65,9 +65,9 @@ class Bicycle5D():
 			np.ndarray: clipped control. [2]
 		"""
 		state_nxt, ctrl_clip = self.integrate_forward_jax(
-			jnp.array(state), jnp.array(control)
+			jnp.asarray(state), jnp.asarray(control)
 		)
-		return np.array(state_nxt), np.array(ctrl_clip)
+		return np.asarray(state_nxt), np.asarray(ctrl_clip)
 
 	@partial(jax.jit, static_argnums=(0,))
 	def integrate_forward_jax(
@@ -86,9 +86,14 @@ class Bicycle5D():
 		# Clips the controller values between min and max accel and steer values.
 		ctrl_clip = jnp.clip(control, self.ctrl_limits[:, 0], self.ctrl_limits[:, 1])
 		state_nxt = self._integrate_forward(state, ctrl_clip)
-		state_nxt = state_nxt.at[3].set(
-			jnp.mod(state_nxt[3] + jnp.pi, 2 * jnp.pi) - jnp.pi
-		)
+
+		# Important Note: This mod cannot be done here.
+		# Otherwise, we need carefully handle the mod in forward pass as well. 
+
+		# state_nxt = state_nxt.at[3].set(
+		# 	jnp.mod(state_nxt[3] + jnp.pi, 2 * jnp.pi) - jnp.pi
+		# )
+
 		# Clip the state to the limits.
 		state_nxt = jnp.clip(state_nxt, self.state_limits[:, 0], self.state_limits[:, 1])
 		return state_nxt, ctrl_clip
@@ -199,5 +204,10 @@ class Bicycle5D():
 		states = states.at[:, 0].set(initial_state)
 		states, ctrls_clip = jax.lax.fori_loop(
 				0, n - 1, _rollout_nominal_step, (states, controls)
+		)
+
+		# Make the heading angle in [-pi, pi]
+		states.at[3,:].set(
+			jnp.mod(states[3, :] + jnp.pi, 2 * jnp.pi) - jnp.pi
 		)
 		return states, ctrls_clip

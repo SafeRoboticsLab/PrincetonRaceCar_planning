@@ -32,7 +32,7 @@ class Obstacle:
         vertices[:,-1] = -1
         verts.extend(list(vertices))
         
-        polygon = hppfcl.Convex.convexHull(verts, True, None)
+        polygon = hppfcl.Convex.convexHull(verts, False, None)
         
         return polygon 
     

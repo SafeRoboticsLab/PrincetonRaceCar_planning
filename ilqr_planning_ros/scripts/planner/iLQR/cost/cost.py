@@ -50,7 +50,7 @@ class Cost():
         
         (obs_cx, obs_cu, obs_cxx, 
             obs_cuu, obs_cux) = self.obstacle_cost.get_derivatives(states, ctrls, obs_refs)
-
+        
         return (state_cx + ctrl_cx + obs_cx,
                 state_cu + ctrl_cu + obs_cu,
                 state_cxx + ctrl_cxx + obs_cxx,

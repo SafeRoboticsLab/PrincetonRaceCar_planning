@@ -50,7 +50,7 @@ class iLQR():
 		self.reg_scale_up = float(self.config.reg_scale_up)
 		self.reg_scale_down = float(self.config.reg_scale_down)
 
-		self.warm_up()
+		# self.warm_up()
 
 	def update_path(self, path: Path):
 		self.path = path
@@ -70,7 +70,7 @@ class iLQR():
 			init_state: [num_dim_x] np.ndarray: initial state.
 			control: [num_dim_u, N] np.ndarray: initial control.
 		'''
-		
+		np.set_printoptions(suppress=True, precision=5)
 		if controls is None:
 			controls = jnp.zeros((self.dim_u, self.n))
 		else:
@@ -87,45 +87,45 @@ class iLQR():
 		J = self.cost.get_traj_cost(states, controls, refs, obs_refs)
 		converged = False
 		reg = self.reg_init
+		
 
 		for _ in range(self.max_iter):
 			updated = False
 			# We need cost derivatives from 0 to N-1, but we only need dynamics
 			# jacobian from 0 to N-2.
-			t0 = time.time()
 			c_x, c_u, c_xx, c_uu, c_ux = self.cost.get_derivatives(states, controls, refs, obs_refs)
-			# print("get_derivatives time: ", time.time() - t0)
-			t0 = time.time()
+
 			# We only need dynamics derivatives (A and B matrics) from 0 to N-2.
 			fx, fu = self.dyn.get_jacobian(states[:, :-1], controls[:, :-1])
+			
 			# print("get_jacobian: ", time.time() - t0)
 			while not updated and reg <= self.reg_max:
 				# Backward pass with new regularization.
-				t0 = time.time()
 				K_closed_loop, k_open_loop = self.backward_pass(
 					c_x=c_x, c_u=c_u, c_xx=c_xx, c_uu=c_uu, c_ux=c_ux, fx=fx, fu=fu, reg = reg
 				)
-				# print("Backward pass time: ", time.time() - t0)
+				
 				# Line search through alphas.
 				for alpha in self.alphas:
-					t0 = time.time()
 					X_new, U_new, J_new, refs_new, obs_refs_new = (
 							self.forward_pass(
 									states, controls, K_closed_loop, k_open_loop, alpha
 							)
 					)
-					# print("Forward pass time: ", time.time() - t0)
+					
 					if J_new < J:  # Improved!
 						# Small improvement.
-						if np.abs(J-J_new)/max(1, np.abs(J)) < self.tol:
+						# if np.abs(J-J_new)/max(1, np.abs(J)) < self.tol:
+						if np.abs(J-J_new) < self.tol:
 							converged = True
-						# print("Update from ", J, " to ", J_new, "reg: ", reg, "alpha: ", alpha, time.time()-t_start)
+						print("Update from ", J, " to ", J_new, "reg: ", reg, "alpha: ", alpha, time.time()-t_start)
 						# Updates nominal trajectory and best cost.
 						J = J_new
 						states = X_new
 						controls = U_new
 						refs = refs_new
 						obs_refs = obs_refs_new
+						
 						updated = True
 						reg = max(reg*self.reg_scale_down, self.reg_min)
 						break # break the for loop
@@ -143,9 +143,8 @@ class iLQR():
 				status = 1
 				break
 			
-
 		t_process = time.time() - t_start
-		# print(obs_refs[:,-1,:])
+		print(obs_refs[:,-1,:])
 		solver_info = dict(
 				states=np.asarray(states), controls=np.asarray(controls),
 				K_closed_loop=np.asarray(K_closed_loop),
@@ -210,13 +209,24 @@ class iLQR():
 			Q_ux = c_ux[:, :, n] + fu[:, :, n].T @ V_xx @ fx[:, :, n]
 			Q_uu = c_uu[:, :, n] + fu[:, :, n].T @ V_xx @ fu[:, :, n]
 
-			Q_uu_inv = jnp.linalg.inv(Q_uu + reg_mat)
+			# According to the paper, the regularization is added to Vxx for robustness.
+			# http://roboticexplorationlab.org/papers/iLQR_Tutorial.pdf
+			V_xx_reg = V_xx + reg_mat
+			Q_ux_reg = c_ux[:, :, n] + fu[:, :, n].T @ V_xx_reg @ fx[:, :, n]
+			Q_uu_reg = c_uu[:, :, n] + fu[:, :, n].T @ V_xx_reg @ fu[:, :, n]
+			Q_uu_reg_inv = jnp.linalg.inv(Q_uu_reg)
+			# Q_uu_inv = jnp.linalg.inv(Q_uu + reg_mat)
 
-			Ks = Ks.at[:, :, n].set(-Q_uu_inv @ Q_ux)
-			ks = ks.at[:, n].set(-Q_uu_inv @ Q_u)
+			Ks = Ks.at[:, :, n].set(-Q_uu_reg_inv @ Q_ux_reg)
+			ks = ks.at[:, n].set(-Q_uu_reg_inv @ Q_u)
 
-			V_x = Q_x + Q_ux.T @ ks[:, n]
-			V_xx = Q_xx + Q_ux.T @ Ks[:, :, n]
+			V_x = Q_x + Ks[:,:,n].T @ Q_u + Q_ux.T @ ks[:, n] + Ks[:,:,n].T @ Q_uu @ ks[:, n] 
+			V_xx = Q_xx +  Ks[:, :, n].T @ Q_ux+ Q_ux.T @ Ks[:, :, n] + Ks[:, :, n].T @ Q_uu @ Ks[:, :, n]
+
+			# V_x = Q_x + Q_ux.T @ ks[:, n]
+			# V_xx = Q_xx + Q_ux.T @ Ks[:, :, n]
+
+			# jax.debug.print("{x} vs {x1} || {y} vs {y1}", x=V_x_temp.shape, x1 =V_x.shape, y=V_xx_temp.shape, y1 = V_xx.shape)
 
 			return V_x, V_xx, ks, Ks
 
@@ -225,7 +235,8 @@ class iLQR():
 		ks = jnp.zeros((self.dim_u, self.n - 1))
 		V_x = c_x[:, -1]
 		V_xx = c_xx[:, :, -1]
-		reg_mat = reg * jnp.eye(self.dim_u)
+		# reg_mat = reg * jnp.eye(self.dim_u)
+		reg_mat = reg* jnp.eye(self.dim_x)
 
 		V_x, V_xx, ks, Ks = jax.lax.fori_loop(
 				0, self.n - 1, backward_pass_looper, (V_x, V_xx, ks, Ks)
@@ -255,6 +266,10 @@ class iLQR():
 		X = X.at[:, 0].set(nominal_states[:, 0])
 
 		X, U = jax.lax.fori_loop(0, self.n - 1, _rollout_step, (X, U))
+
+		X.at[3,:].set(
+			jnp.mod(X[3, :] + jnp.pi, 2 * jnp.pi) - jnp.pi
+		)
 		return X, U
 
 	def warm_up(self):

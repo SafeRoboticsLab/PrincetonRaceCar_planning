@@ -20,17 +20,17 @@ class CollisionChecker:
         verts = hppfcl.StdVec_Vec3f()
         verts.extend(
             [
-                np.array([-(self.length - self.wheelbase)/2.0, self.width/2.0, 1]),
-                np.array([-(self.length - self.wheelbase)/2.0, -self.width/2.0, 1]),
-                np.array([(self.length + self.wheelbase)/2.0, self.width/2.0, 1]),
-                np.array([(self.length + self.wheelbase)/2.0, -self.width/2.0, 1]),
-                np.array([-(self.length - self.wheelbase)/2.0, self.width/2.0, -1]),
-                np.array([-(self.length - self.wheelbase)/2.0, -self.width/2.0, -1]),
-                np.array([(self.length + self.wheelbase)/2.0, self.width/2.0, -1]),
-                np.array([(self.length + self.wheelbase)/2.0, -self.width/2.0, -1]),
+                np.array([-(self.length - self.wheelbase)/2.0, self.width/2.0, 100]),
+                np.array([-(self.length - self.wheelbase)/2.0, -self.width/2.0, 100]),
+                np.array([(self.length + self.wheelbase)/2.0, self.width/2.0, 100]),
+                np.array([(self.length + self.wheelbase)/2.0, -self.width/2.0, 100]),
+                np.array([-(self.length - self.wheelbase)/2.0, self.width/2.0, -100]),
+                np.array([-(self.length - self.wheelbase)/2.0, -self.width/2.0, -100]),
+                np.array([(self.length + self.wheelbase)/2.0, self.width/2.0, -100]),
+                np.array([(self.length + self.wheelbase)/2.0, -self.width/2.0, -100]),
             ]
         )
-        self.ego_object = hppfcl.Convex.convexHull(verts, True, None)
+        self.ego_object = hppfcl.Convex.convexHull(verts, False, None)
         self.ego_collision_object = hppfcl.CollisionObject(self.ego_object, np.eye(3), np.zeros(3))
     
     @partial(jax.jit, static_argnums=(0,))
@@ -80,7 +80,7 @@ class CollisionChecker:
         obj_point_global = ego_rotm@obj_point + ego_trans
         distance  = result.min_distance
         if distance < -1e10:
-            distance = 0
+            distance = -0.01
 
         output = np.array([ego_point[0], ego_point[1], obj_point_global[0], obj_point_global[1], distance])
         
@@ -113,6 +113,7 @@ class CollisionChecker:
         for i, obstacle in enumerate(obstacles):
             for t in range(self.step):
                 collision_ref[i,:, t] = self._check_collision(state[:,t], obstacle.at(t))
+        
         output = jnp.asarray(collision_ref)
         
         return output
