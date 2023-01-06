@@ -103,7 +103,7 @@ class Path:
         
         closest_pt, slope, s = self.get_closest_pts(points, normalize_progress)
 
-        v_ref = np.ones_like(s)*3
+        v_ref = np.ones_like(s)*2
 
         left_bound = np.ones_like(s)*0.5
         right_bound = np.ones_like(s)*0.5

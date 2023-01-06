@@ -17,7 +17,7 @@ class Policy():
         '''
         Return the policy at time t
         '''
-        i = int(np.floor((t-self.t0).to_sec()/self.dt))
+        i = self.get_index(t)
         if i>= self.N:
             rospy.logwarn("Try to retrive policy beyond horizon")
             x_i = self.nominal_x[:,-1]
@@ -30,3 +30,19 @@ class Policy():
             K_i = self.K[:,:,i]
 
         return x_i, u_i, K_i
+
+    def get_index(self,t):
+        return  int(np.floor((t-self.t0).to_sec()/self.dt))
+
+    def get_ref_controls(self, t):
+        '''
+        Return the nominal control at time t and forward
+        '''
+        i = self.get_index(t)
+        if i>= self.N:
+            return None
+        else:
+            ref_u = self.zeros_like(self.nominal_u)
+            ref_u[:,:self.N-i] = self.nominal_u[:,i:]
+
+            return ref_u

@@ -33,12 +33,10 @@ class RealtimeBuffer:
                 self.new_data_available = False
             self.lock.release()
         return self.rt_obj
-                
-            
-        
-        
-            
-        
-            
     
-        
+    def reset(self):
+        if self.lock.acquire(blocking=False):
+            self.rt_obj = None
+            self.non_rt_obj = None
+            self.new_data_available = False
+            self.lock.release()
