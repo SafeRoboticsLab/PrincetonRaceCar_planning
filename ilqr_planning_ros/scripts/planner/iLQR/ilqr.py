@@ -75,13 +75,13 @@ class iLQR():
 			controls = jnp.zeros((self.dim_u, self.n))
 		else:
 			assert controls.shape[1] == self.n
-			controls = jnp.array(controls)
-
+			controls = jnp.asarray(controls)
+		
 		# Rolls out the nominal trajectory and gets the initial cost.
 		#* This is differnet from the naive iLQR as it relies on the information
 		#* from the pyspline.
-		states, controls = self.dyn.rollout_nominal(jnp.array(init_state), controls)
-
+		init_state = jnp.asarray(init_state, dtype=jnp.float32)
+		states, controls = self.dyn.rollout_nominal(jnp.asarray(init_state), controls)
 		refs = jnp.array(self.path.get_reference(states[:2, :]))
 		obs_refs = self.collision_checker.check_collisions(states, self.obstacle_list)
 		J = self.cost.get_traj_cost(states, controls, refs, obs_refs)
@@ -115,10 +115,11 @@ class iLQR():
 					
 					if J_new < J:  # Improved!
 						# Small improvement.
-						if np.abs(J-J_new)/max(1, np.abs(J)) < self.tol:
-						# if np.abs(J-J_new) < self.tol:
+						# if np.abs(J-J_new)/max(1, np.abs(J)) < self.tol:
+						if np.abs(J-J_new) < self.tol:
 							converged = True
-						print("Update from ", J, " to ", J_new, "reg: ", reg, "alpha: ", alpha, time.time()-t_start)
+						print("Update from ", J, " to ", J_new, "reg: ", reg,
+								"alpha: {0:0.3f}".format(alpha), "{0:0.3f}".format(time.time()-t_start))
 						# Updates nominal trajectory and best cost.
 						J = J_new
 						states = X_new

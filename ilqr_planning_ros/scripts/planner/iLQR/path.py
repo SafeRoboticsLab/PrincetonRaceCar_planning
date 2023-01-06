@@ -102,9 +102,13 @@ class Path:
         normalize_progress: Optional[bool] = False) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
         
         closest_pt, slope, s = self.get_closest_pts(points, normalize_progress)
+
         v_ref = np.ones_like(s)*3
 
-        return np.concatenate([closest_pt, slope, v_ref, s], axis=0)
+        left_bound = np.ones_like(s)*0.5
+        right_bound = np.ones_like(s)*0.5
+
+        return np.concatenate([closest_pt, slope, v_ref, s, right_bound, left_bound], axis=0)
 
     def get_closest_pts(self, points: np.ndarray,
         normalize_progress: Optional[bool] = False) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:

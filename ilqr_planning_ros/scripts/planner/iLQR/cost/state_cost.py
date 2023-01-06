@@ -24,6 +24,7 @@ class StateCost(BaseCost):
         self.dim_closest_pt_y = config.dim_closest_pt_y
         self.path_weight = config.path_weight
         self.path_delta = config.path_huber_delta
+
         if config.path_cost_type == 'quadratic':
             self.path_cost_func = quadratic_cost
         elif config.path_cost_type == 'huber':
@@ -52,6 +53,13 @@ class StateCost(BaseCost):
         # Progress Cost
         self.dim_progress = config.dim_progress
         self.progress_weight = config.progress_weight/(config.n * config.dt)
+
+        # Boundary Cost
+        self.width = config.width
+        self.dim_right_boundary = config.dim_right_boundary
+        self.dim_left_boundary = config.dim_left_boundary
+        self.lane_boundary_a = config.lane_boundary_a
+        self.lane_boundary_b = config.lane_boundary_b
     
     @partial(jax.jit, static_argnums=(0,))
     def get_terminal_cost(
@@ -89,6 +97,15 @@ class StateCost(BaseCost):
         cr = jnp.cos(slope)
         path_dev = sr * (state[0] - closest_pt_x) - cr *(state[1] - closest_pt_y)
         path_cost = self.path_cost_func(path_dev, self.path_weight, self.path_delta)
+
+        # boundary_cost
+        right_boundary = ref[self.dim_right_boundary]
+        left_boundary = ref[self.dim_left_boundary]
+        b_right = path_dev - right_boundary + self.width/2.0
+        b_left = -path_dev - left_boundary + self.width/2.0
+
+        boundary_cost = exp_linear_cost(b_right, self.lane_boundary_a, self.lane_boundary_b) + \
+                        exp_linear_cost(b_left, self.lane_boundary_a, self.lane_boundary_b)
         
         # Progress cost
         # This is always zero due to the way the closest point is calculated
@@ -107,5 +124,7 @@ class StateCost(BaseCost):
         lat_accel_cost = self.lat_accel_cost_func(lat_accel,
                                     self.lat_accel_a,
                                     self.lat_accel_b)
+        # jax.debug.print('{a}, {b}, {c}, {d}',a=path_cost, b=vel_cost, c=lat_accel_cost, d=progress_cost)
+
         
-        return path_cost + vel_cost + lat_accel_cost + progress_cost
+        return path_cost + vel_cost + lat_accel_cost + progress_cost + boundary_cost

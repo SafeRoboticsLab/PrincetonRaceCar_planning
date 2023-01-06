@@ -55,7 +55,7 @@ class SingleObstacleCost(BaseCost):
 
         # Do not calculate gradient w.r.t velocity
         v_no_grad = jax.lax.stop_gradient(state[2])
-        obs_b = self.obs_b*jnp.maximum(v_no_grad, 1)
+        obs_b = self.obs_b#*jnp.maximum(v_no_grad, 1)
         
         return exp_linear_cost(y, self.obs_a, obs_b)
     

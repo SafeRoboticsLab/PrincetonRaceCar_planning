@@ -1,0 +1,71 @@
+####################################################
+############### General Parameters #################
+####################################################
+
+n:  10 # horizon length
+dt:  0.1 # time step
+
+
+####################################################
+###########Optimization Parameters #################
+####################################################        
+max_iter:  50 # maximum number of iterations
+# tolerance for the iLQR convergence
+# Make sure this is smaller than the minimum line search step size
+tol:  1e-3
+
+# line search parameters
+# We assume line search parameter is a**np.arange(0, b, c)
+line_search_a:  0.1 # line search parameter a
+line_search_b:  3 # line search parameter b
+line_search_c:  1 # line search parameter c
+
+# regularization parameters
+reg_min:  1e-3 # minimum regularization
+reg_max:  1e5 # maximum regularization
+reg_scale_down:  0.5 # scale down factor for regularization
+reg_scale_up:  5 # scale up factor for regularization
+reg_init:  1.0 # initial regularization
+
+
+####################################################
+########## Parameters for iLQR COST ################
+####################################################
+
+########        State Cost          ############
+
+# Path Offset Cost
+path_cost_type:  'quadratic' # 'quadratic' or 'huber'
+path_weight:  2.0 # weight for the path deviation cost
+path_huber_delta:  2 # huber loss delta for path deviation cost
+
+# Velocity Cost
+vel_cost_type:  'quadratic' # 'quadratic' or 'huber'
+vel_weight:  1 # weight for the velocity cost
+vel_huber_delta:  1 # huber loss delta for velocity cost
+
+# Lateral Acceleration Cost
+# We use ExpLinearCost for lateral acceleration cost
+lat_accel_thres:  6.0 # threshold for lateral acceleration cost
+lat_accel_a:  5.0 # parameter for lateral acceleration cost
+lat_accel_b:  2.0 # parameter for ExpLinear Cost
+
+# Progress Cost
+progress_weight:  1.0  # weight for the progress cost
+
+# Lane Boundary Cost
+lane_boundary_a:  100.0 # parameter for lane boundary cost
+lane_boundary_b:  2.0 # parameter for ExpLinear Cost
+
+########        Control Cost          ############
+
+ctrl_cost_type:  'quadratic' # 'quadratic' or 'huber'
+# those value should not be too small
+ctrl_cost_accel_weight:  1
+ctrl_cost_steer_weight:  1
+ctrl_cost_accel_huber_delta:  1.0 # huber loss delta
+ctrl_cost_steer_huber_delta:  1.0 # huber loss delta
+
+########        Obstacle Cost          ############
+obs_a:  10.0 # parameter for obstacle cost
+obs_b:  10.0 # parameter for ExpLinear Cost
