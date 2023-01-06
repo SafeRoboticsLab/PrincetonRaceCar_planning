@@ -15,7 +15,7 @@ class Config():
         ####################################################
         ###########Optimization Parameters #################
         ####################################################        
-        self.max_iter = 100 # maximum number of iterations
+        self.max_iter = 50 # maximum number of iterations
         # tolerance for the iLQR convergence
         # Make sure this is smaller than the minimum line search step size
         self.tol = 1e-3
@@ -23,13 +23,13 @@ class Config():
         # line search parameters
         # We assume line search parameter is a**np.arange(0, b, c)
         self.line_search_a = 0.1 # line search parameter a
-        self.line_search_b = 5 # line search parameter b
-        self.line_search_c = 1 # line search parameter c
+        self.line_search_b = 3 # line search parameter b
+        self.line_search_c = 0.5 # line search parameter c
         
         # regularization parameters
         self.reg_min = 1e-3 # minimum regularization
         self.reg_max = 1e5 # maximum regularization
-        self.reg_scale_down = 0.1 # scale down factor for regularization
+        self.reg_scale_down = 0.5 # scale down factor for regularization
         self.reg_scale_up = 10.0 # scale up factor for regularization
         self.reg_init = 1.0 # initial regularization
         
@@ -74,7 +74,7 @@ class Config():
         # Velocity Cost
         self.dim_vel_ref = 3 # dimension of reference velocity in the reference
         self.vel_cost_type = 'quadratic' # 'quadratic' or 'huber'
-        self.vel_weight = 1.0 # weight for the velocity cost
+        self.vel_weight = 2.0 # weight for the velocity cost
         self.vel_huber_delta = 0.5 # huber loss delta for velocity cost
         
         # Lateral Acceleration Cost
@@ -102,7 +102,7 @@ class Config():
         self.dim_obs_radius = 7 # dimension of obstacle radius in the reference
         
         self.obs_a = 10.0 # parameter for obstacle cost
-        self.obs_b = 15.0 # parameter for ExpLinear Cost
+        self.obs_b = 10.0 # parameter for ExpLinear Cost
                 
     def load_config(self, config_path):
         with open(config_path, 'r') as f:

@@ -50,7 +50,7 @@ class iLQR():
 		self.reg_scale_up = float(self.config.reg_scale_up)
 		self.reg_scale_down = float(self.config.reg_scale_down)
 
-		# self.warm_up()
+		self.warm_up()
 
 	def update_path(self, path: Path):
 		self.path = path
@@ -115,8 +115,8 @@ class iLQR():
 					
 					if J_new < J:  # Improved!
 						# Small improvement.
-						# if np.abs(J-J_new)/max(1, np.abs(J)) < self.tol:
-						if np.abs(J-J_new) < self.tol:
+						if np.abs(J-J_new)/max(1, np.abs(J)) < self.tol:
+						# if np.abs(J-J_new) < self.tol:
 							converged = True
 						print("Update from ", J, " to ", J_new, "reg: ", reg, "alpha: ", alpha, time.time()-t_start)
 						# Updates nominal trajectory and best cost.
@@ -144,7 +144,7 @@ class iLQR():
 				break
 			
 		t_process = time.time() - t_start
-		print(obs_refs[:,-1,:])
+		# print(obs_refs[:,-1,:])
 		solver_info = dict(
 				states=np.asarray(states), controls=np.asarray(controls),
 				K_closed_loop=np.asarray(K_closed_loop),
