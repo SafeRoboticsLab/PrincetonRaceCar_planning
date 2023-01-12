@@ -38,7 +38,7 @@ class iLQR():
 		self.tol = float(self.config.tol)  # ILQR update tolerance.
 
 		# line search parameters.
-		self.alphas = self.config.line_search_a**(np.arange(0, 
+		self.alphas = self.config.line_search_base**(np.arange(self.config.line_search_a, 
                                                 self.config.line_search_b,
                                                 self.config.line_search_c)
                                             )
@@ -82,7 +82,7 @@ class iLQR():
 		#* from the pyspline.
 		init_state = jnp.asarray(init_state, dtype=jnp.float32)
 		states, controls = self.dyn.rollout_nominal(jnp.asarray(init_state), controls)
-		refs = jnp.array(self.path.get_reference(states[:2, :]))
+		refs = jnp.asarray(self.path.get_reference(states[:2, :]))
 		obs_refs = self.collision_checker.check_collisions(states, self.obstacle_list)
 		J = self.cost.get_traj_cost(states, controls, refs, obs_refs)
 		converged = False
@@ -93,59 +93,62 @@ class iLQR():
 			updated = False
 			# We need cost derivatives from 0 to N-1, but we only need dynamics
 			# jacobian from 0 to N-2.
+			t0 = time.time()
 			c_x, c_u, c_xx, c_uu, c_ux = self.cost.get_derivatives(states, controls, refs, obs_refs)
+			print("Cost derivatives time: ", time.time() - t0)
 
+			t0 = time.time()
 			# We only need dynamics derivatives (A and B matrics) from 0 to N-2.
 			fx, fu = self.dyn.get_jacobian(states[:, :-1], controls[:, :-1])
+			print("Dynamics derivatives time: ", time.time() - t0)
 			
-			# print("get_jacobian: ", time.time() - t0)
-			while not updated and reg <= self.reg_max:
-				# Backward pass with new regularization.
-				K_closed_loop, k_open_loop = self.backward_pass_new(
-					c_x=c_x, c_u=c_u, c_xx=c_xx, c_uu=c_uu, c_ux=c_ux, fx=fx, fu=fu, reg = reg
+			t0 = time.time()
+			# Backward pass with new regularization.
+			K_closed_loop, k_open_loop, reg = self.backward_pass(
+				c_x=c_x, c_u=c_u, c_xx=c_xx, c_uu=c_uu, c_ux=c_ux, fx=fx, fu=fu, reg = reg
+			)
+			print("Backward pass time: ", time.time() - t0)
+			
+			# Line search through alphas.
+			for alpha in self.alphas:
+				t0 = time.time()
+				X_new, U_new, J_new, refs_new, obs_refs_new = (
+						self.forward_pass(
+								states, controls, K_closed_loop, k_open_loop, alpha
+						)
 				)
+				# print("Forward pass time: ", time.time() - t0)
+				# print(alpha, J_new, J, J_new-J, reg)
 				
-				# Line search through alphas.
-				for alpha in self.alphas:
-					X_new, U_new, J_new, refs_new, obs_refs_new = (
-							self.forward_pass(
-									states, controls, K_closed_loop, k_open_loop, alpha
-							)
-					)
-					
-					if J_new < J:  # Improved!
-						# Small improvement.
-						# if np.abs(J-J_new)/max(1, np.abs(J)) < self.tol:
-						if np.abs(J-J_new) < self.tol:
-							converged = True
-						print("Update from ", J, " to ", J_new, "reg: ", reg,
-								"alpha: {0:0.3f}".format(alpha), "{0:0.3f}".format(time.time()-t_start))
-						# Updates nominal trajectory and best cost.
-						J = J_new
-						states = X_new
-						controls = U_new
-						refs = refs_new
-						obs_refs = obs_refs_new
-						
-						updated = True
-						reg = max(reg*self.reg_scale_down, self.reg_min)
-						break # break the for loop
-						
-				# If the line search fails, increase the regularization.
-				if not updated:
-					reg *= self.reg_scale_up
+				if J_new <= J:  # Improved!
+					# Small improvement.
+					# if np.abs(J-J_new)/max(1, np.abs(J)) < self.tol:
+					if np.abs(J-J_new) < self.tol:
+						converged = True
+					print("Update from ", J, " to ", J_new, "reg: ", reg,
+							"alpha: {0:0.3f}".format(alpha), "{0:0.3f}".format(time.time()-t_start))
+					# Updates nominal trajectory and best cost.
+					J = J_new
+					states = X_new
+					controls = U_new
+					refs = refs_new
+					obs_refs = obs_refs_new
+					reg = max(self.reg_min, reg/self.reg_scale_down)
+					updated = True
+					break # break the for loop
 
+			
 			# if no line search succeeds, terminate.
 			if not updated:
 				status = 2
 				break
+
 			# Terminates early if the objective improvement is negligible.
 			if converged:
 				status = 1
 				break
 			
 		t_process = time.time() - t_start
-		# print(obs_refs[:,-1,:])
 		solver_info = dict(
 				states=np.asarray(states), controls=np.asarray(controls),
 				K_closed_loop=np.asarray(K_closed_loop),
@@ -166,86 +169,18 @@ class iLQR():
 		)
 		#* This is differnet from the naive iLQR as it relies on the information
 		#* from the pyspline. Thus, it cannot be used with jit.
-		# t0 = time.time()
-		refs = jnp.array(self.path.get_reference(X[:2, :]))
-		# t1 = time.time()
+		t0 = time.time()
+		refs = jnp.asarray(self.path.get_reference(X[:2, :]))
+		t1 = time.time()
 		obs_refs = self.collision_checker.check_collisions(X, self.obstacle_list)
-		# t2 = time.time()
+		t2 = time.time()
 		J = self.cost.get_traj_cost(X, U, refs, obs_refs)
-		# # print("Cost time: ", t1-t0, t2-t1, time.time()-t2)
+		print("forward time: ", t1-t0, t2-t1, time.time()-t2)
 
 		return X, U, J, refs, obs_refs
 
 	@partial(jax.jit, static_argnums=(0,))
 	def backward_pass(
-			self, c_x: DeviceArray, c_u: DeviceArray, c_xx: DeviceArray,
-			c_uu: DeviceArray, c_ux: DeviceArray, fx: DeviceArray, fu: DeviceArray,
-			reg: float
-	) -> Tuple[DeviceArray, DeviceArray]:
-		"""
-		Jitted backward pass looped computation.
-
-		Args:
-				c_x (DeviceArray): (dim_x, N)
-				c_u (DeviceArray): (dim_u, N)
-				c_xx (DeviceArray): (dim_x, dim_x, N)
-				c_uu (DeviceArray): (dim_u, dim_u, N)
-				c_ux (DeviceArray): (dim_u, dim_x, N)
-				fx (DeviceArray): (dim_x, dim_x, N-1)
-				fu (DeviceArray): (dim_x, dim_u, N-1)
-
-		Returns:
-				Ks (DeviceArray): gain matrices (dim_u, dim_x, N - 1)
-				ks (DeviceArray): gain vectors (dim_u, N - 1)
-		"""
-
-		@jax.jit
-		def backward_pass_looper(i, _carry):
-			V_x, V_xx, ks, Ks = _carry
-			n = self.n - 2 - i
-
-			Q_x = c_x[:, n] + fx[:, :, n].T @ V_x
-			Q_u = c_u[:, n] + fu[:, :, n].T @ V_x
-			Q_xx = c_xx[:, :, n] + fx[:, :, n].T @ V_xx @ fx[:, :, n]
-			Q_ux = c_ux[:, :, n] + fu[:, :, n].T @ V_xx @ fx[:, :, n]
-			Q_uu = c_uu[:, :, n] + fu[:, :, n].T @ V_xx @ fu[:, :, n]
-
-			# According to the paper, the regularization is added to Vxx for robustness.
-			# http://roboticexplorationlab.org/papers/iLQR_Tutorial.pdf
-			V_xx_reg = V_xx + reg_mat
-			Q_ux_reg = c_ux[:, :, n] + fu[:, :, n].T @ V_xx_reg @ fx[:, :, n]
-			Q_uu_reg = c_uu[:, :, n] + fu[:, :, n].T @ V_xx_reg @ fu[:, :, n]
-			Q_uu_reg_inv = jnp.linalg.inv(Q_uu_reg)
-			# Q_uu_inv = jnp.linalg.inv(Q_uu + reg_mat)
-			jax.debug.print("itr {i}, det = {d}, reg={r}", i=i, d=jnp.linalg.det(Q_uu_reg), r=reg)
-			Ks = Ks.at[:, :, n].set(-Q_uu_reg_inv @ Q_ux_reg)
-			ks = ks.at[:, n].set(-Q_uu_reg_inv @ Q_u)
-
-			V_x = Q_x + Ks[:,:,n].T @ Q_u + Q_ux.T @ ks[:, n] + Ks[:,:,n].T @ Q_uu @ ks[:, n] 
-			V_xx = Q_xx +  Ks[:, :, n].T @ Q_ux+ Q_ux.T @ Ks[:, :, n] + Ks[:, :, n].T @ Q_uu @ Ks[:, :, n]
-
-			# V_x = Q_x + Q_ux.T @ ks[:, n]
-			# V_xx = Q_xx + Q_ux.T @ Ks[:, :, n]
-
-			# jax.debug.print("{x} vs {x1} || {y} vs {y1}", x=V_x_temp.shape, x1 =V_x.shape, y=V_xx_temp.shape, y1 = V_xx.shape)
-
-			return V_x, V_xx, ks, Ks
-
-		# Initializes.
-		Ks = jnp.zeros((self.dim_u, self.dim_x, self.n - 1))
-		ks = jnp.zeros((self.dim_u, self.n - 1))
-		V_x = c_x[:, -1]
-		V_xx = c_xx[:, :, -1]
-		# reg_mat = reg * jnp.eye(self.dim_u)
-		reg_mat = reg* jnp.eye(self.dim_x)
-
-		V_x, V_xx, ks, Ks = jax.lax.fori_loop(
-				0, self.n - 1, backward_pass_looper, (V_x, V_xx, ks, Ks)
-		)
-		return Ks, ks
-
-	@partial(jax.jit, static_argnums=(0,))
-	def backward_pass_new(
 			self, c_x: DeviceArray, c_u: DeviceArray, c_xx: DeviceArray,
 			c_uu: DeviceArray, c_ux: DeviceArray, fx: DeviceArray, fu: DeviceArray,
 			reg: float
@@ -291,14 +226,18 @@ class iLQR():
 			Q_uu_reg = c_uu[:, :, n] + fu[:, :, n].T @ V_xx_reg @ fu[:, :, n]
 
 			@jax.jit
-			def isposdef(A):
-				return jnp.all(jnp.linalg.eigvals(A) > 0)
+			def isposdef(A, reg):
+				# jax.debug.print("reg: {x}",  x=reg)
+				return (jnp.all(jnp.linalg.eigvals(A) > 0) | (reg >= self.reg_max))
 
 			@jax.jit 
 			def false_func(val):
 				V_x, V_xx, ks, Ks = init()
+				# jax.debug.print("Backward pass failed at iteration {n} with reg {reg}", n=n, reg=reg)
 				updated_n = self.n - 2
-				updated_reg = reg*self.reg_scale_up
+				updated_reg = self.reg_scale_up * reg
+				updated_reg = jax.lax.cond(updated_reg<=self.reg_max, 
+									lambda x: x, lambda x: self.reg_max, updated_reg)
 				return V_x, V_xx, ks, Ks, updated_n, updated_reg
 
 			@jax.jit
@@ -312,23 +251,22 @@ class iLQR():
 				V_x = Q_x + Ks[:,:,n].T @ Q_u + Q_ux.T @ ks[:, n] + Ks[:,:,n].T @ Q_uu @ ks[:, n] 
 				V_xx = Q_xx +  Ks[:, :, n].T @ Q_ux+ Q_ux.T @ Ks[:, :, n] + Ks[:, :, n].T @ Q_uu @ Ks[:, :, n]
     
-				updated_n = n - 1
-				updated_reg = reg
-				return V_x, V_xx, ks, Ks, updated_n, updated_reg
-
-			return jax.lax.cond(isposdef(Q_uu_reg), true_func, false_func, (Ks, ks))
+				return V_x, V_xx, ks, Ks, n-1, reg
+			#itr_update = itr+1
+			return jax.lax.cond(isposdef(Q_uu_reg, reg), true_func, false_func, (Ks, ks))
 
 		@jax.jit
 		def cond_fun(val):
-			V_x, V_xx, ks, Ks, n, reg = val
+			_, _, _, _, n, _ = val
 			return n>=0
 
 		# Initializes.
 		V_x, V_xx, ks, Ks = init()
 		n = self.n - 2
-
-		V_x, V_xx, ks, Ks, n, reg = jax.lax.while_loop(cond_fun, backward_pass_looper, (V_x, V_xx, ks, Ks, n, reg))
-		return Ks, ks
+		
+		V_x, V_xx, ks, Ks, n, reg = jax.lax.while_loop(cond_fun, backward_pass_looper,(V_x, V_xx, ks, Ks, n, reg))
+		# jax.debug.print("Backward pass success with reg {reg}", reg=reg)
+		return Ks, ks, reg
 
 	@partial(jax.jit, static_argnums=(0,))
 	def rollout(

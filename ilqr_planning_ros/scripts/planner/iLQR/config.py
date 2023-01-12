@@ -18,18 +18,19 @@ class Config():
         self.max_iter = 50 # maximum number of iterations
         # tolerance for the iLQR convergence
         # Make sure this is smaller than the minimum line search step size
-        self.tol = 1e-10
+        self.tol = 1e-3
         
         # line search parameters
-        # We assume line search parameter is a**np.arange(0, b, c)
-        self.line_search_a = 0.1 # line search parameter a
+        # We assume line search parameter is base**np.arange(a, b, c)
+        self.line_search_base = 0.1
+        self.line_search_a = 0 # line search parameter a
         self.line_search_b = 3 # line search parameter b
         self.line_search_c = 1 # line search parameter c
         
         # regularization parameters
-        self.reg_min = 1e-3 # minimum regularization
-        self.reg_max = 1e5 # maximum regularization
-        self.reg_scale_down = 0.5 # scale down factor for regularization
+        self.reg_min = 1e-5 # minimum regularization
+        self.reg_max = 1e8 # maximum regularization
+        self.reg_scale_down = 5 # scale down factor for regularization
         self.reg_scale_up = 5 # scale up factor for regularization
         self.reg_init = 1.0 # initial regularization
         
