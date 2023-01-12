@@ -18,7 +18,7 @@ class Config():
         self.max_iter = 50 # maximum number of iterations
         # tolerance for the iLQR convergence
         # Make sure this is smaller than the minimum line search step size
-        self.tol = 0.1
+        self.tol = 1e-10
         
         # line search parameters
         # We assume line search parameter is a**np.arange(0, b, c)
