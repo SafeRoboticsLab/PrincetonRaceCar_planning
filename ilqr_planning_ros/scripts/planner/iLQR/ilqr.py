@@ -170,21 +170,28 @@ class iLQR():
 					updated = True
 					fail_attempts = 0
 					break # break the for loop
-			
-			# if no line search succeeds, terminate.
-			if not updated:
-				fail_attempts += 1
-				reg = reg*self.reg_scale_up
-				if self.verbose: 
-					print(f"Fail attempts {fail_attempts}, new reg {reg}.")
-				if fail_attempts > self.max_attempt or reg > self.reg_max:
-					status = 2
+				elif np.abs(J-J_new) < 1e-3:
+					converged = True
+					if self.verbose:
+						print(f"cost increase from {J} to {J_new}, but the difference is {np.abs(J-J_new)} is small.")
 					break
 
 			# Terminates early if the objective improvement is negligible.
 			if converged:
 				status = 1
 				break
+
+			# if no line search succeeds, terminate.
+			if not updated:
+				fail_attempts += 1
+				reg = reg*self.reg_scale_up
+				if self.verbose: 
+					print(f"Fail attempts {fail_attempts}, cost increase from {J} to {J_new} new reg {reg}.")
+				if fail_attempts > self.max_attempt or reg > self.reg_max:
+					status = 2
+					break
+
+			
 			
 		t_process = time.time() - t_start
 		analysis_string = f"Exit after {i} iterations with runtime {t_process} with status {status_lookup[status]}. "+ \

@@ -10,12 +10,12 @@ class Config():
         self.num_dim_u = 2
         self.n = 10 # horizon length
         self.dt = 0.1 # time step
-        self.verbose = False
+        self.verbose = True
         
         ####################################################
         ###########Optimization Parameters #################
         ####################################################        
-        self.max_iter = 200 # maximum number of iterations
+        self.max_iter = 50 # maximum number of iterations
         # tolerance for the iLQR convergence
         # Make sure this is smaller than the minimum line search step size
         self.tol = 5e-2
@@ -72,13 +72,13 @@ class Config():
         self.dim_closest_pt_y = 1 # dimension of closest point y in the reference
         self.dim_path_slope = 2 # dimension of path slope in the reference
         self.path_cost_type = 'quadratic' # 'quadratic' or 'huber'
-        self.path_weight = 4.0 # weight for the path deviation cost
+        self.path_weight = 1.0 # weight for the path deviation cost
         self.path_huber_delta = 2 # huber loss delta for path deviation cost
 
         # Velocity Cost
         self.dim_vel_ref = 3 # dimension of reference velocity in the reference
         self.vel_cost_type = 'quadratic' # 'quadratic' or 'huber'
-        self.vel_weight = 1 # weight for the velocity cost
+        self.vel_weight = 2.0 # weight for the velocity cost
         self.vel_huber_delta = 1 # huber loss delta for velocity cost
 
         # Lateral Acceleration Cost
@@ -101,8 +101,8 @@ class Config():
         
         self.ctrl_cost_type = 'quadratic' # 'quadratic' or 'huber'
         # those value should not be too small
-        self.ctrl_cost_accel_weight = 1
-        self.ctrl_cost_steer_weight = 1
+        self.ctrl_cost_accel_weight = 0.1
+        self.ctrl_cost_steer_weight = 0.1
         self.ctrl_cost_accel_huber_delta = 1.0 # huber loss delta
         self.ctrl_cost_steer_huber_delta = 1.0 # huber loss delta
         
