@@ -60,6 +60,20 @@ class iLQR():
 		for vertices in vertices_list:
 			self.obstacle_list.append(Obstacle(vertices))
 
+	def get_references(self, states):
+		t0 = time.time()
+		states_np = np.asarray(states)
+		print("get np:", time.time()-t0)
+  
+		t0 = time.time()
+		refs = self.path.get_reference(states_np[:2, :])
+		print("get refs:", time.time()-t0)
+
+		t0 = time.time()
+		obs_refs = self.collision_checker.check_collisions(states_np, self.obstacle_list)
+		print("get obsrefs:", time.time()-t0)
+		return refs, obs_refs
+
 	def plan(self, init_state: np.ndarray, 
 				controls: Optional[np.ndarray] = None) -> Dict:
 		t_start = time.time()
@@ -70,24 +84,26 @@ class iLQR():
 			init_state: [num_dim_x] np.ndarray: initial state.
 			control: [num_dim_u, N] np.ndarray: initial control.
 		'''
-		np.set_printoptions(suppress=True, precision=5)
+		# np.set_printoptions(suppress=True, precision=5)
 		if controls is None:
-			controls = jnp.zeros((self.dim_u, self.n))
+			controls =np.zeros((self.dim_u, self.n))
 		else:
 			assert controls.shape[1] == self.n
-			controls = jnp.asarray(controls)
 		
 		# Rolls out the nominal trajectory and gets the initial cost.
 		#* This is differnet from the naive iLQR as it relies on the information
 		#* from the pyspline.
-		init_state = jnp.asarray(init_state, dtype=jnp.float32)
-		states, controls = self.dyn.rollout_nominal(jnp.asarray(init_state), controls)
-		refs = jnp.asarray(self.path.get_reference(states[:2, :]))
-		obs_refs = self.collision_checker.check_collisions(states, self.obstacle_list)
+		states, controls = self.dyn.rollout_nominal(init_state, controls)
+  
+		refs, obs_refs = self.get_references(states)
+
 		J = self.cost.get_traj_cost(states, controls, refs, obs_refs)
+
 		converged = False
 		reg = self.reg_init
 		
+		fail_attempts = 0
+		print("set up time:", time.time() - t_start)
 
 		for _ in range(self.max_iter):
 			updated = False
@@ -95,19 +111,19 @@ class iLQR():
 			# jacobian from 0 to N-2.
 			t0 = time.time()
 			c_x, c_u, c_xx, c_uu, c_ux = self.cost.get_derivatives(states, controls, refs, obs_refs)
-			print("Cost derivatives time: ", time.time() - t0)
+			# print("Cost derivatives time: ", time.time() - t0)
 
 			t0 = time.time()
 			# We only need dynamics derivatives (A and B matrics) from 0 to N-2.
-			fx, fu = self.dyn.get_jacobian(states[:, :-1], controls[:, :-1])
-			print("Dynamics derivatives time: ", time.time() - t0)
+			fx, fu = self.dyn.get_jacobian(states, controls)
+			# print("Dynamics derivatives time: ", time.time() - t0)
 			
 			t0 = time.time()
-			# Backward pass with new regularization.
+			#Backward pass with new regularization.
 			K_closed_loop, k_open_loop, reg = self.backward_pass(
 				c_x=c_x, c_u=c_u, c_xx=c_xx, c_uu=c_uu, c_ux=c_ux, fx=fx, fu=fu, reg = reg
 			)
-			print("Backward pass time: ", time.time() - t0)
+			# print("Backward pass time: ", time.time() - t0)
 			
 			# Line search through alphas.
 			for alpha in self.alphas:
@@ -135,13 +151,17 @@ class iLQR():
 					obs_refs = obs_refs_new
 					reg = max(self.reg_min, reg/self.reg_scale_down)
 					updated = True
+					fail_attempts = 0
 					break # break the for loop
-
 			
 			# if no line search succeeds, terminate.
 			if not updated:
-				status = 2
-				break
+				fail_attempts += 1
+				reg = reg*self.reg_scale_up
+				print(f"Fail attempts {fail_attempts}, new reg {reg}.")
+				if fail_attempts > 10 or reg > self.reg_max:
+					status = 2
+					break
 
 			# Terminates early if the objective improvement is negligible.
 			if converged:
@@ -169,14 +189,10 @@ class iLQR():
 		)
 		#* This is differnet from the naive iLQR as it relies on the information
 		#* from the pyspline. Thus, it cannot be used with jit.
-		t0 = time.time()
-		refs = jnp.asarray(self.path.get_reference(X[:2, :]))
-		t1 = time.time()
-		obs_refs = self.collision_checker.check_collisions(X, self.obstacle_list)
-		t2 = time.time()
+		refs, obs_refs = self.get_references(X)
+		
 		J = self.cost.get_traj_cost(X, U, refs, obs_refs)
-		print("forward time: ", t1-t0, t2-t1, time.time()-t2)
-
+		
 		return X, U, J, refs, obs_refs
 
 	@partial(jax.jit, static_argnums=(0,))

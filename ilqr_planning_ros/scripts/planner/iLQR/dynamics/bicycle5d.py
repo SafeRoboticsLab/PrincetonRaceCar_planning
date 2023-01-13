@@ -186,7 +186,7 @@ class Bicycle5D():
 
 	@partial(jax.jit, static_argnums=(0,))
 	def rollout_nominal(
-			self, initial_state: DeviceArray, controls: DeviceArray
+			self, initial_state: np.ndarray, controls: DeviceArray
 	) -> Tuple[DeviceArray, DeviceArray]:
 		'''
 		Rolls out the nominal trajectory Givent the controls and initial state.

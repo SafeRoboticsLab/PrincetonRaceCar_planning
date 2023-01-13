@@ -15,7 +15,7 @@ class Config():
         ####################################################
         ###########Optimization Parameters #################
         ####################################################        
-        self.max_iter = 50 # maximum number of iterations
+        self.max_iter = 200 # maximum number of iterations
         # tolerance for the iLQR convergence
         # Make sure this is smaller than the minimum line search step size
         self.tol = 1e-3
@@ -69,13 +69,13 @@ class Config():
         self.dim_closest_pt_y = 1 # dimension of closest point y in the reference
         self.dim_path_slope = 2 # dimension of path slope in the reference
         self.path_cost_type = 'quadratic' # 'quadratic' or 'huber'
-        self.path_weight = 10.0 # weight for the path deviation cost
+        self.path_weight = 4.0 # weight for the path deviation cost
         self.path_huber_delta = 2 # huber loss delta for path deviation cost
 
         # Velocity Cost
         self.dim_vel_ref = 3 # dimension of reference velocity in the reference
         self.vel_cost_type = 'quadratic' # 'quadratic' or 'huber'
-        self.vel_weight = 2 # weight for the velocity cost
+        self.vel_weight = 1 # weight for the velocity cost
         self.vel_huber_delta = 1 # huber loss delta for velocity cost
 
         # Lateral Acceleration Cost
@@ -86,7 +86,7 @@ class Config():
 
         # Progress Cost
         self.dim_progress = 4 # dimension of progress in the reference
-        self.progress_weight = 2.0  # weight for the progress cost
+        self.progress_weight = 1.0  # weight for the progress cost
 
         # Lane Boundary Cost
         self.dim_right_boundary = 5 # dimension of lane boundary in the reference

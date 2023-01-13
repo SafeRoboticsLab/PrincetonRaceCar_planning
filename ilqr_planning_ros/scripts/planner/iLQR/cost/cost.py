@@ -30,10 +30,13 @@ class Cost():
 		return:
 			cost: float
 		'''
-        
+        t0 = time.time()
         state_cost = self.state_cost.get_traj_cost(states, ctrls, refs)
+        t1 = time.time()
         control_cost = self.control_cost.get_traj_cost(states, ctrls, refs)
+        t2 = time.time()
         obstacle_cost = self.obstacle_cost.get_traj_cost(states, ctrls, obs_refs)
+        # print("get cost: ", t1 - t0, t2-t1, time.time()-t2)
 
         return state_cost + control_cost + obstacle_cost
 

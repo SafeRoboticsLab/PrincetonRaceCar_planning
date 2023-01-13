@@ -51,8 +51,8 @@ class CollisionChecker:
         ego_trans_inv = jnp.array([-(cp*state[0] + sp*state[1]),
                                 (sp*state[0] - cp*state[1]), 0])
         return ego_rotm, ego_trans, ego_rotm_inv, ego_trans_inv
-        
-    def _check_collision(self, state: DeviceArray, polytope: hppfcl.ConvexBase) -> np.ndarray:
+            
+    def _check_collision(self, state: np.ndarray, polytope: hppfcl.ConvexBase) -> np.ndarray:
         """
         Check collision between the ego vehicle and a polytope
         args:
@@ -61,15 +61,20 @@ class CollisionChecker:
         polytope: a hppfcl collision object whose vertices are in the global coordinate frame
         """
         # get the ego vehicle pose 
-        ego_rotm, ego_trans, ego_rotm_inv, ego_trans_inv = self._gen_pose(state)
-        ego_rotm = np.asarray(ego_rotm)
-        ego_trans = np.asarray(ego_trans)
-        ego_rotm_inv = np.asarray(ego_rotm_inv)
-        ego_trans_inv = np.asarray(ego_trans_inv)
+        psi = state[3]
+        cp = np.cos(psi)
+        sp = np.sin(psi)
+        ego_rotm = np.array([[cp, -sp],
+                            [sp, cp]])
+        ego_trans = state[:2]
+        ego_rotm_inv = np.array([[cp, sp, 0],
+                                [-sp, cp, 0],
+                                [0,0,1]])
+        ego_trans_inv = np.array([-(cp*state[0] + sp*state[1]),
+                                (sp*state[0] - cp*state[1]), 0])
         
         # create a collision object for the polytope in the ego vehicle frame
         collision_object = hppfcl.CollisionObject(polytope, ego_rotm_inv, ego_trans_inv)
-
         # check collision between the ego vehicle and the obstacles
         request = hppfcl.DistanceRequest()
         result = hppfcl.DistanceResult()
@@ -78,15 +83,16 @@ class CollisionChecker:
         obj_point = result.getNearestPoint2()[:2]
         
         obj_point_global = ego_rotm@obj_point + ego_trans
+        
         distance  = result.min_distance
         if distance < -1e10:
             distance = -0.01
-
+        
         output = np.array([ego_point[0], ego_point[1], obj_point_global[0], obj_point_global[1], distance])
         
         return output
     
-    def check_collisions(self, state: Union[np.ndarray, DeviceArray], obstacles: list) -> DeviceArray:
+    def check_collisions(self, state: Union[np.ndarray, DeviceArray], obstacles: list) -> np.ndarray:
         """
         Check collision between the ego vehicle and a list of obstacles
         args:
@@ -99,21 +105,15 @@ class CollisionChecker:
         
         collision_ref: a 3D numpy array of shape (num_obstacles, 5, n)
         """
-
         num_obstacles = len(obstacles)
         # No obstacles return None
         if num_obstacles == 0:
             return None
-
-        if not isinstance(state, np.ndarray):
-            state = np.asarray(state)
         
         # initialize the collision_ref for the ego vehicle
-        collision_ref = np.empty((num_obstacles, 5, self.step))
+        collision_ref = np.zeros((num_obstacles, 5, self.step))
+
         for i, obstacle in enumerate(obstacles):
             for t in range(self.step):
                 collision_ref[i,:, t] = self._check_collision(state[:,t], obstacle.at(t))
-        
-        output = jnp.asarray(collision_ref)
-        
-        return output
+        return collision_ref
