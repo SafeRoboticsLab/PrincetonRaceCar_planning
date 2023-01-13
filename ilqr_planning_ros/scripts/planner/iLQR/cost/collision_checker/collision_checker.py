@@ -6,7 +6,7 @@ from jaxlib.xla_extension import DeviceArray
 import hppfcl
 import numpy as np
 import time
-
+import warnings
 class CollisionChecker:
     def __init__(self, config) -> None:
         
@@ -92,7 +92,7 @@ class CollisionChecker:
         
         return output
     
-    def check_collisions(self, state: Union[np.ndarray, DeviceArray], obstacles: list) -> np.ndarray:
+    def check_collisions(self, state: np.ndarray, obstacles: list) -> np.ndarray:
         """
         Check collision between the ego vehicle and a list of obstacles
         args:
@@ -105,6 +105,10 @@ class CollisionChecker:
         
         collision_ref: a 3D numpy array of shape (num_obstacles, 5, n)
         """
+        if not isinstance(state, np.ndarray):
+            warnings.warn(f"'obs_refs' is a class of {type(state)} instead of <an np.ndarray>. "+ \
+                "There maybe performance issue due to sliceing []")
+        
         num_obstacles = len(obstacles)
         # No obstacles return None
         if num_obstacles == 0:

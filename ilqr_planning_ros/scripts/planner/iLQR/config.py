@@ -10,7 +10,7 @@ class Config():
         self.num_dim_u = 2
         self.n = 10 # horizon length
         self.dt = 0.1 # time step
-
+        self.verbose = False
         
         ####################################################
         ###########Optimization Parameters #################
@@ -18,12 +18,12 @@ class Config():
         self.max_iter = 200 # maximum number of iterations
         # tolerance for the iLQR convergence
         # Make sure this is smaller than the minimum line search step size
-        self.tol = 1e-3
+        self.tol = 5e-2
         
         # line search parameters
         # We assume line search parameter is base**np.arange(a, b, c)
         self.line_search_base = 0.1
-        self.line_search_a = 0 # line search parameter a
+        self.line_search_a = -1 # line search parameter a
         self.line_search_b = 3 # line search parameter b
         self.line_search_c = 1 # line search parameter c
         
@@ -33,6 +33,9 @@ class Config():
         self.reg_scale_down = 5 # scale down factor for regularization
         self.reg_scale_up = 5 # scale up factor for regularization
         self.reg_init = 1.0 # initial regularization
+        
+        # max number of re-attempts after unsuccessful line search
+        self.max_attempt = 5
         
         ####################################################
         ############### Dynamics Parameters ################

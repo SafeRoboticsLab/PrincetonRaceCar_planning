@@ -13,6 +13,9 @@ from .path import Path
 from .config import Config
 import time 
 
+status_lookup = ["Iteration Limit Exceed",
+                "Converged",
+                "Failed Line Search"]
 class iLQR():
 	def __init__(self, config_file = None) -> None:
 
@@ -21,14 +24,15 @@ class iLQR():
 			self.config.load_config(config_file)  # Load config from file.
 		
 		# print(self.config)
-
+		self.verbose =self.config.verbose
+		if self.verbose:
+			print("iLQR setting:", self.config)
 		self.dyn = Bicycle5D(self.config)
 		self.cost = Cost(self.config)
 		self.collision_checker = CollisionChecker(self.config)
 		self.obstacle_list = []
 		self.path = None
 		
-
 		# iLQR parameters
 		self.dim_x = self.config.num_dim_x
 		self.dim_u = self.config.num_dim_u
@@ -42,14 +46,15 @@ class iLQR():
                                                 self.config.line_search_b,
                                                 self.config.line_search_c)
                                             )
-		# print(self.alphas)
+		if self.verbose:
+			print("Line Search Alphas: ", self.alphas)
 		# regularization parameters
 		self.reg_min = float(self.config.reg_min)
 		self.reg_max = float(self.config.reg_max)
 		self.reg_init = float(self.config.reg_init)
 		self.reg_scale_up = float(self.config.reg_scale_up)
 		self.reg_scale_down = float(self.config.reg_scale_down)
-
+		self.max_attempt = self.config.max_attempt
 		self.warm_up()
 
 	def update_path(self, path: Path):
@@ -61,23 +66,15 @@ class iLQR():
 			self.obstacle_list.append(Obstacle(vertices))
 
 	def get_references(self, states):
-		t0 = time.time()
 		states_np = np.asarray(states)
-		print("get np:", time.time()-t0)
-  
-		t0 = time.time()
 		refs = self.path.get_reference(states_np[:2, :])
-		print("get refs:", time.time()-t0)
-
-		t0 = time.time()
 		obs_refs = self.collision_checker.check_collisions(states_np, self.obstacle_list)
-		print("get obsrefs:", time.time()-t0)
 		return refs, obs_refs
 
 	def plan(self, init_state: np.ndarray, 
 				controls: Optional[np.ndarray] = None) -> Dict:
 		t_start = time.time()
-		status = 0
+		
 		'''
 		Main iLQR loop.
 		Args:
@@ -94,7 +91,7 @@ class iLQR():
 		#* This is differnet from the naive iLQR as it relies on the information
 		#* from the pyspline.
 		states, controls = self.dyn.rollout_nominal(init_state, controls)
-  
+
 		refs, obs_refs = self.get_references(states)
 
 		J = self.cost.get_traj_cost(states, controls, refs, obs_refs)
@@ -102,21 +99,36 @@ class iLQR():
 		converged = False
 		reg = self.reg_init
 		
+		# parameters for tracking the status
 		fail_attempts = 0
-		print("set up time:", time.time() - t_start)
 
-		for _ in range(self.max_iter):
+		t_setup = time.time() - t_start
+		status = 0
+		num_cost_der = 0
+		num_dyn_der = 0
+		num_back = 0
+		num_forward = 0
+		t_cost_der = 0
+		t_dyn_der = 0
+		t_back = 0
+		t_forward = 0
+
+		for i in range(self.max_iter):
 			updated = False
 			# We need cost derivatives from 0 to N-1, but we only need dynamics
 			# jacobian from 0 to N-2.
 			t0 = time.time()
 			c_x, c_u, c_xx, c_uu, c_ux = self.cost.get_derivatives(states, controls, refs, obs_refs)
 			# print("Cost derivatives time: ", time.time() - t0)
+			t_cost_der += (time.time()-t0)
+			num_cost_der += 1
 
 			t0 = time.time()
 			# We only need dynamics derivatives (A and B matrics) from 0 to N-2.
 			fx, fu = self.dyn.get_jacobian(states, controls)
 			# print("Dynamics derivatives time: ", time.time() - t0)
+			t_dyn_der += (time.time()-t0)
+			num_dyn_der += 1
 			
 			t0 = time.time()
 			#Backward pass with new regularization.
@@ -124,6 +136,8 @@ class iLQR():
 				c_x=c_x, c_u=c_u, c_xx=c_xx, c_uu=c_uu, c_ux=c_ux, fx=fx, fu=fu, reg = reg
 			)
 			# print("Backward pass time: ", time.time() - t0)
+			t_back += (time.time()-t0)
+			num_back += 1
 			
 			# Line search through alphas.
 			for alpha in self.alphas:
@@ -135,13 +149,16 @@ class iLQR():
 				)
 				# print("Forward pass time: ", time.time() - t0)
 				# print(alpha, J_new, J, J_new-J, reg)
+				t_forward += (time.time()-t0)
+				num_forward += 1
 				
 				if J_new <= J:  # Improved!
 					# Small improvement.
 					# if np.abs(J-J_new)/max(1, np.abs(J)) < self.tol:
-					if np.abs(J-J_new) < self.tol:
+					if np.abs(J-J_new) < (self.tol*min(1,alpha)):
 						converged = True
-					print("Update from ", J, " to ", J_new, "reg: ", reg,
+					if self.verbose:
+						print("Update from ", J, " to ", J_new, "reg: ", reg,
 							"alpha: {0:0.3f}".format(alpha), "{0:0.3f}".format(time.time()-t_start))
 					# Updates nominal trajectory and best cost.
 					J = J_new
@@ -158,8 +175,9 @@ class iLQR():
 			if not updated:
 				fail_attempts += 1
 				reg = reg*self.reg_scale_up
-				print(f"Fail attempts {fail_attempts}, new reg {reg}.")
-				if fail_attempts > 10 or reg > self.reg_max:
+				if self.verbose: 
+					print(f"Fail attempts {fail_attempts}, new reg {reg}.")
+				if fail_attempts > self.max_attempt or reg > self.reg_max:
 					status = 2
 					break
 
@@ -169,13 +187,24 @@ class iLQR():
 				break
 			
 		t_process = time.time() - t_start
+		analysis_string = f"Exit after {i} iterations with runtime {t_process} with status {status_lookup[status]}. "+ \
+					f"Set uo takes {t_setup} s. " + \
+					f"Total {num_cost_der} cost derivative with average time of {t_cost_der/num_cost_der} s. " + \
+					f"Total {num_dyn_der} dyn derivative with average time of {t_dyn_der/num_dyn_der} s. " + \
+					f"Total {num_forward} forward with average time of {t_forward/num_forward} s. " +\
+					f"Total {num_back} cost derivative with average time of {t_back/num_back} s."
+
+		if self.verbose:
+			print(analysis_string)
+
 		solver_info = dict(
 				states=np.asarray(states), controls=np.asarray(controls),
 				K_closed_loop=np.asarray(K_closed_loop),
 				k_open_loop=np.asarray(k_open_loop), t_process=t_process,
-				status=status, J=J, c_x=np.asarray(c_x), c_u=np.asarray(c_u),
-				c_xx=np.asarray(c_xx), c_uu=np.asarray(c_uu), c_ux=np.asarray(c_ux),
-				fx=np.asarray(fx), fu=np.asarray(fu), N = self.n, dt = self.dt
+				status=status, J=J, c_x=c_x, c_u=c_u,
+				c_xx=c_xx, c_uu=c_uu, c_ux=c_ux,
+				fx=fx, fu=fu, N = self.n, dt = self.dt, 
+				analysis = analysis_string
 		)
 		return solver_info
 

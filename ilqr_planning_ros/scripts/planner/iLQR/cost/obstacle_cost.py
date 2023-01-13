@@ -7,6 +7,8 @@ import numpy as np
 
 from .base_cost import BaseCost
 from .base_cost import exp_linear_cost
+import warnings
+
 class SingleObstacleCost(BaseCost):
     def __init__(self, config):
         '''
@@ -22,7 +24,7 @@ class SingleObstacleCost(BaseCost):
 
     @partial(jax.jit, static_argnums=(0,))
     def get_running_cost(
-			self, state: DeviceArray, ctrl: DeviceArray, ref: DeviceArray
+			self, state: DeviceArray, ctrl: DeviceArray, ref: np.ndarray
 	) -> float:
         '''
         Given a state, control, and time index, return the cost.
@@ -64,7 +66,7 @@ class ObstacleCost():
         self.single_obstacle_cost = SingleObstacleCost(config)
         
     def get_traj_cost(
-			self, states: DeviceArray, ctrls: DeviceArray, obs_refs: DeviceArray
+			self, states: DeviceArray, ctrls: DeviceArray, obs_refs: np.ndarray
 	) -> float:
         '''
 		Given a state, control, and time index, return the sum of the cost.
@@ -77,10 +79,12 @@ class ObstacleCost():
 		'''
         cost = 0
         if obs_refs is not None:
+            if not isinstance(obs_refs, np.ndarray):
+                warnings.warn(f"'obs_refs' is a class of {type(obs_refs)} instead of <an np.ndarray>. "+ \
+                    "There maybe performance issue due to sliceing []")
             num_obstacle = obs_refs.shape[0]
             for i in range(num_obstacle):
-                cost += self.single_obstacle_cost.get_traj_cost(states, ctrls, obs_refs[i])
-        
+                cost += self.single_obstacle_cost.get_traj_cost(states, ctrls, obs_refs[i, :, :])
         return cost
 
     def get_derivatives(
