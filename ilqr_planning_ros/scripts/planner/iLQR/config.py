@@ -10,7 +10,7 @@ class Config():
         self.num_dim_u = 2
         self.n = 10 # horizon length
         self.dt = 0.1 # time step
-        self.verbose = True
+        self.platform = "cpu" # "cpu" or "gpu" or "tpu"
         
         ####################################################
         ###########Optimization Parameters #################

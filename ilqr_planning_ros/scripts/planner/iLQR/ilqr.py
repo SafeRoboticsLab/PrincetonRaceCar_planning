@@ -1,6 +1,6 @@
 from typing import Tuple, Optional, Dict
 import time
-import copy
+import os
 import numpy as np
 from functools import partial
 import jax
@@ -23,10 +23,14 @@ class iLQR():
 		if config_file is not None:
 			self.config.load_config(config_file)  # Load config from file.
 		
-		# print(self.config)
-		self.verbose =self.config.verbose
-		if self.verbose:
-			print("iLQR setting:", self.config)
+		print("iLQR setting:", self.config)
+
+		# Set up Jax parameters
+		jax.config.update('jax_platform_name', self.config.platform)
+		print("Jax using Platform: ", jax.lib.xla_bridge.get_backend().platform)
+		# If you want to use GPU, lower the memory fraction from 90% to avoid OOM.
+		os.environ["XLA_PYTHON_CLIENT_MEM_FRACTION"] = "20"
+
 		self.dyn = Bicycle5D(self.config)
 		self.cost = Cost(self.config)
 		self.collision_checker = CollisionChecker(self.config)
@@ -46,8 +50,9 @@ class iLQR():
                                                 self.config.line_search_b,
                                                 self.config.line_search_c)
                                             )
-		if self.verbose:
-			print("Line Search Alphas: ", self.alphas)
+		
+		print("Line Search Alphas: ", self.alphas)
+
 		# regularization parameters
 		self.reg_min = float(self.config.reg_min)
 		self.reg_max = float(self.config.reg_max)
@@ -72,7 +77,7 @@ class iLQR():
 		return refs, obs_refs
 
 	def plan(self, init_state: np.ndarray, 
-				controls: Optional[np.ndarray] = None) -> Dict:
+				controls: Optional[np.ndarray] = None, verbose=False) -> Dict:
 		t_start = time.time()
 		
 		'''
@@ -115,27 +120,25 @@ class iLQR():
 
 		for i in range(self.max_iter):
 			updated = False
-			# We need cost derivatives from 0 to N-1, but we only need dynamics
-			# jacobian from 0 to N-2.
+			# Get the derivatives of the cost 
 			t0 = time.time()
 			c_x, c_u, c_xx, c_uu, c_ux = self.cost.get_derivatives(states, controls, refs, obs_refs)
-			# print("Cost derivatives time: ", time.time() - t0)
 			t_cost_der += (time.time()-t0)
 			num_cost_der += 1
-
-			t0 = time.time()
+			
 			# We only need dynamics derivatives (A and B matrics) from 0 to N-2.
+			# But doing slice with Jax will leads to performance issue.
+			# So we calculate the derivatives from 0 to N-1 and Backward pass will ignore the last one.
+			t0 = time.time()
 			fx, fu = self.dyn.get_jacobian(states, controls)
-			# print("Dynamics derivatives time: ", time.time() - t0)
 			t_dyn_der += (time.time()-t0)
 			num_dyn_der += 1
 			
-			t0 = time.time()
 			#Backward pass with new regularization.
+			t0 = time.time()
 			K_closed_loop, k_open_loop, reg = self.backward_pass(
 				c_x=c_x, c_u=c_u, c_xx=c_xx, c_uu=c_uu, c_ux=c_ux, fx=fx, fu=fu, reg = reg
 			)
-			# print("Backward pass time: ", time.time() - t0)
 			t_back += (time.time()-t0)
 			num_back += 1
 			
@@ -147,8 +150,6 @@ class iLQR():
 								states, controls, K_closed_loop, k_open_loop, alpha
 						)
 				)
-				# print("Forward pass time: ", time.time() - t0)
-				# print(alpha, J_new, J, J_new-J, reg)
 				t_forward += (time.time()-t0)
 				num_forward += 1
 				
@@ -157,7 +158,7 @@ class iLQR():
 					# if np.abs(J-J_new)/max(1, np.abs(J)) < self.tol:
 					if np.abs(J-J_new) < (self.tol*min(1,alpha)):
 						converged = True
-					if self.verbose:
+					if verbose:
 						print("Update from ", J, " to ", J_new, "reg: ", reg,
 							"alpha: {0:0.3f}".format(alpha), "{0:0.3f}".format(time.time()-t_start))
 					# Updates nominal trajectory and best cost.
@@ -172,7 +173,7 @@ class iLQR():
 					break # break the for loop
 				elif np.abs(J-J_new) < 1e-3:
 					converged = True
-					if self.verbose:
+					if verbose:
 						print(f"cost increase from {J} to {J_new}, but the difference is {np.abs(J-J_new)} is small.")
 					break
 
@@ -185,14 +186,12 @@ class iLQR():
 			if not updated:
 				fail_attempts += 1
 				reg = reg*self.reg_scale_up
-				if self.verbose: 
+				if verbose: 
 					print(f"Fail attempts {fail_attempts}, cost increase from {J} to {J_new} new reg {reg}.")
 				if fail_attempts > self.max_attempt or reg > self.reg_max:
 					status = 2
 					break
 
-			
-			
 		t_process = time.time() - t_start
 		analysis_string = f"Exit after {i} iterations with runtime {t_process} with status {status_lookup[status]}. "+ \
 					f"Set uo takes {t_setup} s. " + \
@@ -201,7 +200,7 @@ class iLQR():
 					f"Total {num_forward} forward with average time of {t_forward/num_forward} s. " +\
 					f"Total {num_back} cost derivative with average time of {t_back/num_back} s."
 
-		if self.verbose:
+		if verbose:
 			print(analysis_string)
 
 		solver_info = dict(
@@ -279,13 +278,13 @@ class iLQR():
 
 			@jax.jit
 			def isposdef(A, reg):
-				# jax.debug.print("reg: {x}",  x=reg)
-				return (jnp.all(jnp.linalg.eigvals(A) > 0) | (reg >= self.reg_max))
+				# If the regularization is too large, but the matrix is still not positive definite,
+				# we will let the backward pass continue to avoid infinite loop.
+				return (jnp.all(jnp.linalg.eigvalsh(A) > 0) | (reg >= self.reg_max))
 
 			@jax.jit 
 			def false_func(val):
 				V_x, V_xx, ks, Ks = init()
-				# jax.debug.print("Backward pass failed at iteration {n} with reg {reg}", n=n, reg=reg)
 				updated_n = self.n - 2
 				updated_reg = self.reg_scale_up * reg
 				updated_reg = jax.lax.cond(updated_reg<=self.reg_max, 
@@ -304,7 +303,6 @@ class iLQR():
 				V_xx = Q_xx +  Ks[:, :, n].T @ Q_ux+ Q_ux.T @ Ks[:, :, n] + Ks[:, :, n].T @ Q_uu @ Ks[:, :, n]
     
 				return V_x, V_xx, ks, Ks, n-1, reg
-			#itr_update = itr+1
 			return jax.lax.cond(isposdef(Q_uu_reg, reg), true_func, false_func, (Ks, ks))
 
 		@jax.jit
@@ -317,7 +315,6 @@ class iLQR():
 		n = self.n - 2
 		
 		V_x, V_xx, ks, Ks, n, reg = jax.lax.while_loop(cond_fun, backward_pass_looper,(V_x, V_xx, ks, Ks, n, reg))
-		# jax.debug.print("Backward pass success with reg {reg}", reg=reg)
 		return Ks, ks, reg
 
 	@partial(jax.jit, static_argnums=(0,))
@@ -366,9 +363,10 @@ class iLQR():
 		self.update_obstacles(obs_list)
 
 		x_init = np.array([0.0, -1.0, 1, 0, 0])
-
+		print("Start warm up iLQR...")
 		# import matplotlib.pyplot as plt
-		plan = self.plan(x_init)
+		plan = self.plan(x_init, verbose=False)
+		print("iLQR warm up finished.")
 		# plt.plot(plan['states'][0,:], plan['states'][1,:])
 		# print(f"Warm up takes {plan['t_process']} seconds.")
 		self.path = None

@@ -1,6 +1,7 @@
 import numpy as np
 import rospy
-
+from nav_msgs.msg import Path as TrajMsg # used to display the trajectory on RVIZ
+from ros_utility import state_to_pose_stamped
 '''
     A container class to store the feedback policy
 '''
@@ -46,3 +47,16 @@ class Policy():
             ref_u[:,:self.N-i] = self.nominal_u[:,i:]
 
             return ref_u
+        
+    def to_msg(self, frame_id='map'):
+        traj_msg = TrajMsg()
+        traj_msg.header.frame_id = frame_id
+        traj_msg.header.stamp = rospy.Time.from_sec(self.t0)
+        
+        states = self.nominal_x
+        for i in range(states.N):
+            t = self.t0 + i * self.dt
+            pose = state_to_pose_stamped(states[:,i], t, frame_id)
+            traj_msg.poses.append(pose)
+
+        return traj_msg
