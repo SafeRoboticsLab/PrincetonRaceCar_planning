@@ -1,28 +1,12 @@
-################################ ROS Topics that the planner subscribes to ################################
-odometry_topic:       "/tagslam_ros_node/slam_pose"
-path_topic:           "/planning/path"
-obstacle_topic:      "/prediction/obstacles" 
-
-################################ ROS Topics that the planner publishes to ################################
-control_topic:        "/control/control"
-trajectory_topic:     "/planning/trajectory"
-publish_control:      true      # if true, publish control, otherwise assume a separate controller is running
-
 ############################################ Path parameters ###########################################
-predefined_path:      true      # if true, load a predefined path from file rather than subscribing to a topic
-path_file:            "outerloop_center_smooth.csv" # path file to load if load_track is true
+path_file:            "configs/outerloop_center_smooth.csv" # path file to load if load_track is true
 path_width_R:         0.3       # right track width [m]
 path_width_L:         0.3       # left track width [m]
 path_loop:           true      # if true, the path is looped
 
 ############################################ Planning parameters ###########################################
 replan_dt:            0.1       # time between replaning [s]
-ilqr_params_file:     "configs/ilqr.yaml" # file containing the parameters for the iLQR solver
-
-T_axis_to_cam:        [0.0, -1.0, 0.0, 0.06, # camera center offset
-                       0.0, 0.0, -1.0, 0.0,
-                       1.0, 0.0, 0.0, -0.157, #wheelbase
-                       0.0, 0.0, 0.0, 1.0] # camera to rear axis transform
+ilqr_params_file:     ""
 
 ########################################### Control parameters ##############################################
 d_open_loop: [-0.0146, 0.0874, -0.0507, 0.0005, -0.0332, 0.1869, 0.0095, 0.0170, -0.0583, 0.0388]

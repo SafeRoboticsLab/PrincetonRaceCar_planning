@@ -6,17 +6,15 @@ import csv
 import time
 import numpy as np
 import os
-from scipy.spatial.transform import Rotation as R
 
-from .utils import RealtimeBuffer, get_ros_param, State2D, Policy, policy_to_path
+from .utils import RealtimeBuffer, get_ros_param, State2D, Policy
 from .iLQR import iLQR, Path
 
-# from racecar_msgs.msg import ServoMsg, OdomMsg, PathMsg, ObstacleMsg, TrajMsg
+from racecar_msgs.msg import ServoMsg #, OdomMsg, PathMsg, ObstacleMsg, TrajMsg
 # https://wiki.ros.org/rospy_tutorials/Tutorials/numpy
-from rospy.numpy_msg import numpy_msg
+# from rospy.numpy_msg import numpy_msg
 from nav_msgs.msg import Odometry
 from nav_msgs.msg import Path as TrajMsg # used to display the trajectory on RVIZ
-
 from std_srvs.srv import Empty, EmptyResponse
 
 
@@ -32,6 +30,7 @@ class PlanningRecedingHorizon():
         self.setup_planner()
 
         self.t_last_replan = 0
+        self.t_last_state = None
         
         # Indicate if the planner is used to generate a new trajectory
         self.planner_ready = False
@@ -56,13 +55,13 @@ class PlanningRecedingHorizon():
         self.package_path = rospy.get_param('~package_path')
         
         # Read ROS topic names to subscribe 
-        self.odometry_topic = get_ros_param('~odometry_topic', '/perception/odometry')
+        self.odom_topic = get_ros_param('~odom_topic', '/slam_pose')
         self.path_topic = get_ros_param('~path_topic', '/planning/path')
         self.obstacle_topic = get_ros_param('~obstacle_topic', '/prediction/obstacles')
         
         # Read ROS topic names to publish
-        self.control_topic = get_ros_param('~control_topic', '/controller/rc_control')
-        self.trajectory_topic = get_ros_param('~trajectory_topic', '/planning/trajectory')
+        self.control_topic = get_ros_param('~control_topic', '/control/servo_control')
+        self.traj_topic = get_ros_param('~traj_topic', '/planning/trajectory')
         # self.if_pub_control = get_ros_param('~publish_control', False)
         
         # Read Planning parameters
@@ -82,7 +81,9 @@ class PlanningRecedingHorizon():
         This function setup the iLQR solver
         '''
         # Read iLQR parameters
-        if os.path.isabs(self.ilqr_params_file):
+        if self.ilqr_params_file == "":
+            ilqr_params_abs_path = None
+        elif os.path.isabs(self.ilqr_params_file):
             ilqr_params_abs_path = self.ilqr_params_file
         else:
             ilqr_params_abs_path = os.path.join(self.package_path, self.ilqr_params_file)
@@ -103,7 +104,7 @@ class PlanningRecedingHorizon():
         This function sets up the publisher for the trajectory
         '''
         # Publisher for the planned nominal trajectory for visualization
-        self.trajectory_pub = rospy.Publisher(self.trajectory_topic, TrajMsg, queue_size=1)
+        self.trajectory_pub = rospy.Publisher(self.traj_topic, TrajMsg, queue_size=1)
 
         # Publisher for the control command
         self.control_pub = rospy.Publisher(self.control_topic, ServoMsg, queue_size=1)
@@ -112,10 +113,14 @@ class PlanningRecedingHorizon():
         '''
         This function sets up the subscriber for the odometry and path
         '''
-        self.pose_sub = rospy.Subscriber(self.odometry_topic, Odometry, self.odometry_callback, queue_size=1)
+        self.pose_sub = rospy.Subscriber(self.odom_topic, Odometry, self.odometry_callback, queue_size=1)
         # self.obstacle_sub = rospy.Subscriber(self.obstacle_topic, ObstacleMsg, self.obstacle_callback, queue_size=1)
         if self.predefined_path:
-            path_center_line = self.load_path(self.path_file)
+            if os.path.isabs(self.path_file):
+                path_center_line = self.load_path(self.path_file)
+            else:
+                path_center_line = self.load_path(os.path.join(self.package_path, self.path_file))
+            
             path = Path(path_center_line, self.path_width_left, self.path_width_right, self.path_loop)
             self.path_buffer.writeFromNonRT(path)
         else:
@@ -129,13 +134,14 @@ class PlanningRecedingHorizon():
         self.start_srv = rospy.Service('start_planning_cb', Empty, self.start_planning_cb)
         self.stop_srv = rospy.Service('stop_planning_cb', Empty, self.stop_planning_cb)
 
-    def start_planning_cb(self):
+    def start_planning_cb(self, req):
         '''ros service callback function for start planning'''
+        print(req)
         rospy.loginfo("Start planning!")
         self.planner_ready = True
         return EmptyResponse()
 
-    def stop_planning_cb(self):
+    def stop_planning_cb(self, req):
         '''ros service callback function for stop planning'''
         rospy.loginfo("Stop planning!")
         self.planner_ready = False
@@ -190,10 +196,35 @@ class PlanningRecedingHorizon():
         return np.array([x, y])
     
     def publish_control(self, state: State2D):
-        pass
+        
+        servo_msg = ServoMsg()
+        servo_msg.header.stamp = rospy.Time.now()
+            
+        if self.t_last_state is None:
+            dt_state = 0.0
+        else:
+            dt_state = state.t - self.t_last_state
+        
+        policy = self.policy_buffer.readFromRT()
+        if policy is not None:
+            x_i, u_i, K_i = policy.get_policy(state.t)
+            cur_state_vec = state.state_vector(self.prev_delta)
+            dx = (cur_state_vec - x_i)
+            dx[3] = np.mod(dx[3] + np.pi, 2 * np.pi) - np.pi
+            u = u_i + K_i @ dx
+            
+            servo_msg.throttle = u[0]
+            servo_msg.steer = self.prev_delta + u[1]*dt_state
+            self.prev_delta = x_i[-1]
+        else:
+            # apply brake
+            servo_msg.throttle = -5.0
+            servo_msg.steer = 0.0
+        self.control_pub.publish(servo_msg)
+        self.t_last_state = state.t
 
     def planning_thread(self):
-        time.sleep(5)
+        # time.sleep(5)
         rospy.loginfo("Planning thread started waiting for ROS service calls...")
         while not rospy.is_shutdown():
             # determine if we need to replan
@@ -222,8 +253,6 @@ class PlanningRecedingHorizon():
                     if self.path_buffer.new_data_available:
                         new_path = self.path_buffer.readFromRT()
                         self.planner.update_path(new_path)
-                        # new path, we ignore the initial controls
-                        init_controls = None
                         rospy.logdebug("Path updated!")
                     
                     # Replan use ilqr
@@ -236,15 +265,17 @@ class PlanningRecedingHorizon():
                         t_cur = rospy.get_time()
                         rospy.loginfo("First plan gerenated!")
                     
-                    new_policy = Policy(new_plan['states'], new_plan['controls'],
-                                        new_plan['K_closed_loop'], t_cur, 
-                                        self.planner.dt, self.planner.n)
+                    if self.planner_ready:
+                        # If stop planning is called, we will not write to the buffer
+                        new_policy = Policy(new_plan['states'], new_plan['controls'],
+                                            new_plan['K_closed_loop'], t_cur, 
+                                            self.planner.dt, self.planner.n)
+                        self.policy_buffer.writeFromNonRT(new_policy)
 
-                    self.policy_buffer.writeFromNonRT(new_policy)
-                    
-                    self.t_last_replan = t_cur
-                    # publish the new policy for RVIZ visualization
-                    self.trajectory_pub.publish(new_policy.to_msg())        
+                        self.t_last_replan = t_cur
+                        # publish the new policy for RVIZ visualization
+                        self.trajectory_pub.publish(new_policy.to_msg())        
+
 
     def run(self):
         rospy.spin() 

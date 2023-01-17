@@ -139,7 +139,8 @@ class Path:
 
         if not normalize_progress:
             s = s * self.length
-
+            
+        
         return closest_pt, slope, s.reshape(1, -1)
 
     def project_point(self, points: np.ndarray,

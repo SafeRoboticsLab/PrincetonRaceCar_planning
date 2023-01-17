@@ -326,9 +326,10 @@ class iLQR():
 		@jax.jit
 		def _rollout_step(i, args):
 			X, U = args
-			u_fb = jnp.einsum(
-					"ik,k->i", K_closed_loop[:, :, i], (X[:, i] - nominal_states[:, i])
-			)
+			dx = X[:, i] - nominal_states[:, i]
+			# VERY IMPORTANT: THIS IS A HACK TO MAKE THE ANGLE DIFFERENCE BETWEEN -pi and pi
+			dx = dx.at[3].set(jnp.mod(dx[3] + jnp.pi, 2 * jnp.pi) - jnp.pi)
+			u_fb = jnp.einsum("ik,k->i", K_closed_loop[:, :, i], dx)
 			u = nominal_controls[:, i] + alpha * k_open_loop[:, i] + u_fb
 			x_nxt, u_clip = self.dyn.integrate_forward_jax(X[:, i], u)
 			X = X.at[:, i + 1].set(x_nxt)
@@ -341,9 +342,6 @@ class iLQR():
 
 		X, U = jax.lax.fori_loop(0, self.n - 1, _rollout_step, (X, U))
 
-		X.at[3,:].set(
-			jnp.mod(X[3, :] + jnp.pi, 2 * jnp.pi) - jnp.pi
-		)
 		return X, U
 
 	def warm_up(self):

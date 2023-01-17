@@ -87,12 +87,10 @@ class Bicycle5D():
 		ctrl_clip = jnp.clip(control, self.ctrl_limits[:, 0], self.ctrl_limits[:, 1])
 		state_nxt = self._integrate_forward(state, ctrl_clip)
 
-		# Important Note: This mod cannot be done here.
-		# Otherwise, we need carefully handle the mod in forward pass as well. 
-
-		# state_nxt = state_nxt.at[3].set(
-		# 	jnp.mod(state_nxt[3] + jnp.pi, 2 * jnp.pi) - jnp.pi
-		# )
+		# Important Note: we need carefully handle the mod in forward pass as well. 
+		state_nxt = state_nxt.at[3].set(
+			jnp.mod(state_nxt[3] + jnp.pi, 2 * jnp.pi) - jnp.pi
+		)
 
 		# Clip the state to the limits.
 		state_nxt = jnp.clip(state_nxt, self.state_limits[:, 0], self.state_limits[:, 1])

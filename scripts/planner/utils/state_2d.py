@@ -1,5 +1,6 @@
 import numpy as np
 from scipy.spatial.transform import Rotation as R
+from tf.transformations import euler_from_quaternion
 
 class State2D():
     '''
@@ -21,14 +22,16 @@ class State2D():
 
         self.initialized = False
 
-    def from_odom(self, odom_msg):
+    def from_odom_msg(self, odom_msg):
         '''
         Construct state from odometry message
         '''
         self.t = odom_msg.header.stamp.to_sec()
         self.x = odom_msg.pose.pose.position.x
         self.y = odom_msg.pose.pose.position.y
-        self.theta = odom_msg.pose.pose.orientation.z
+        q = [odom_msg.pose.pose.orientation.x, odom_msg.pose.pose.orientation.y, 
+                odom_msg.pose.pose.orientation.z, odom_msg.pose.pose.orientation.w]
+        self.psi = euler_from_quaternion(q)[-1]
         
         self.v_long = odom_msg.twist.twist.linear.x
         self.v_lat = odom_msg.twist.twist.linear.y
@@ -37,7 +40,7 @@ class State2D():
         self.v_dir = np.arctan2(self.v_lat, self.v_long)
 
         self.w = odom_msg.twist.twist.angular.z
-
+        
         self.initialized = True
         
     def from_SE3(self, pose_base_to_world, twist_base, t):
@@ -63,7 +66,7 @@ class State2D():
         
         self.initialized = True
     
-    def from_state(self, x, y, psi, v_long, w, t):
+    def from_state(self, x, y, v_long, psi, w, t):
         '''
         Construct state from a state object
         '''
@@ -86,7 +89,7 @@ class State2D():
         '''
         Return the state vector
         '''
-        return np.array([self.x, self.y, self.psi, self.v_long, delta])
+        return np.array([self.x, self.y, self.v_long, self.psi, delta])
         
     def __str__(self):
         return f"State at [{np.round(self.x,3)}, {np.round(self.y,3)}] "+ \
