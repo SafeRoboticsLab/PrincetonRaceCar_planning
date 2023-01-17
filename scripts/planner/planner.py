@@ -38,9 +38,9 @@ class PlanningRecedingHorizon():
         # Indicate if the planner is first time to run rather than replan
         self.planner_stopped = True
         
-        self.setup_subscriber()
-
         self.setup_publisher()
+        
+        self.setup_subscriber()
 
         self.setup_service()
 
