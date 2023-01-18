@@ -131,8 +131,8 @@ class PlanningRecedingHorizon():
         '''
         Set up ros service
         '''
-        self.start_srv = rospy.Service('start_planning_cb', Empty, self.start_planning_cb)
-        self.stop_srv = rospy.Service('stop_planning_cb', Empty, self.stop_planning_cb)
+        self.start_srv = rospy.Service('/planning/start_planning', Empty, self.start_planning_cb)
+        self.stop_srv = rospy.Service('/planning/stop_planning', Empty, self.stop_planning_cb)
 
     def start_planning_cb(self, req):
         '''ros service callback function for start planning'''
