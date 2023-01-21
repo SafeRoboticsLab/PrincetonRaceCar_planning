@@ -8,13 +8,13 @@ import numpy as np
 import os
 
 from .utils import RealtimeBuffer, get_ros_param, State2D, Policy
-from .iLQR import iLQR, Path
+from .iLQR import iLQR, RefPath
 
-from racecar_msgs.msg import ServoMsg #, OdomMsg, PathMsg, ObstacleMsg, TrajMsg
+from racecar_msgs.msg import ServoMsg #, OdomMsg, PathMsg, ObstacleMsg, PathMsg
 # https://wiki.ros.org/rospy_tutorials/Tutorials/numpy
 # from rospy.numpy_msg import numpy_msg
 from nav_msgs.msg import Odometry
-from nav_msgs.msg import Path as TrajMsg # used to display the trajectory on RVIZ
+from nav_msgs.msg import Path as PathMsg # used to display the trajectory on RVIZ
 from std_srvs.srv import Empty, EmptyResponse
 
 
@@ -104,7 +104,7 @@ class PlanningRecedingHorizon():
         This function sets up the publisher for the trajectory
         '''
         # Publisher for the planned nominal trajectory for visualization
-        self.trajectory_pub = rospy.Publisher(self.traj_topic, TrajMsg, queue_size=1)
+        self.trajectory_pub = rospy.Publisher(self.traj_topic, PathMsg, queue_size=1)
 
         # Publisher for the control command
         self.control_pub = rospy.Publisher(self.control_topic, ServoMsg, queue_size=1)
@@ -121,7 +121,7 @@ class PlanningRecedingHorizon():
             else:
                 path_center_line = self.load_path(os.path.join(self.package_path, self.path_file))
             
-            path = Path(path_center_line, self.path_width_left, self.path_width_right, self.path_loop)
+            path = RefPath(path_center_line, self.path_width_left, self.path_width_right, self.path_loop)
             self.path_buffer.writeFromNonRT(path)
         else:
             # self.path_sub = rospy.Subscriber(self.path_topic, numpy_msg(PathMsg), self.path_callback, queue_size=1)
@@ -252,7 +252,7 @@ class PlanningRecedingHorizon():
                     # Update the path
                     if self.path_buffer.new_data_available:
                         new_path = self.path_buffer.readFromRT()
-                        self.planner.update_path(new_path)
+                        self.planner.update_ref_path(new_path)
                         rospy.logdebug("Path updated!")
                     
                     # Replan use ilqr
@@ -275,7 +275,6 @@ class PlanningRecedingHorizon():
                         self.t_last_replan = t_cur
                         # publish the new policy for RVIZ visualization
                         self.trajectory_pub.publish(new_policy.to_msg())        
-
 
     def run(self):
         rospy.spin() 

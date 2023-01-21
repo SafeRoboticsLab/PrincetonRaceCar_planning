@@ -5,7 +5,7 @@ import matplotlib
 from pyspline.pyCurve import Curve
 import csv
 
-class Path:
+class RefPath:
     def __init__(self, center_line: np.ndarray, width_left: float,
                     width_right: float, loop: Optional[bool] = True) -> None:
         '''

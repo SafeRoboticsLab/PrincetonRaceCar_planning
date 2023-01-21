@@ -9,7 +9,7 @@ from jaxlib.xla_extension import DeviceArray
 
 from .dynamics import Bicycle5D
 from .cost import Cost, CollisionChecker, Obstacle
-from .path import Path
+from .ref_path import RefPath
 from .config import Config
 import time 
 
@@ -35,7 +35,7 @@ class iLQR():
 		self.cost = Cost(self.config)
 		self.collision_checker = CollisionChecker(self.config)
 		self.obstacle_list = []
-		self.path = None
+		self.ref_path = None
 		
 		# iLQR parameters
 		self.dim_x = self.config.num_dim_x
@@ -62,8 +62,8 @@ class iLQR():
 		self.max_attempt = self.config.max_attempt
 		self.warm_up()
 
-	def update_path(self, path: Path):
-		self.path = path
+	def update_ref_path(self, ref_path: RefPath):
+		self.ref_path = ref_path
 
 	def update_obstacles(self, vertices_list: list):
 		self.obstacle_list = []
@@ -72,7 +72,7 @@ class iLQR():
 
 	def get_references(self, states):
 		states_np = np.asarray(states)
-		refs = self.path.get_reference(states_np[:2, :])
+		refs = self.ref_path.get_reference(states_np[:2, :])
 		obs_refs = self.collision_checker.check_collisions(states_np, self.obstacle_list)
 		return refs, obs_refs
 
@@ -353,7 +353,7 @@ class iLQR():
 		centerline[0,:] = 1 * np.cos(theta)
 		centerline[1,:] = 1 * np.sin(theta)
 
-		self.path = Path(centerline, 0.5, 0.5, True)
+		self.ref_path = RefPath(centerline, 0.5, 0.5, True)
 
 		# add obstacle
 		obs = np.array([[0, 0, 0.5, 0.5], [1, 1.5, 1, 1.5]]).T
@@ -367,7 +367,7 @@ class iLQR():
 		print("iLQR warm up finished.")
 		# plt.plot(plan['states'][0,:], plan['states'][1,:])
 		# print(f"Warm up takes {plan['t_process']} seconds.")
-		self.path = None
+		self.ref_path = None
 		self.obstacle_list = []
 	
 
