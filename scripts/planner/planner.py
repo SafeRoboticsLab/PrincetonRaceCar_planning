@@ -157,8 +157,7 @@ class PlanningRecedingHorizon():
 
         # Retrive state needed for planning from the odometry message
         # [x, y, v, w, delta]
-        state_cur = State2D()
-        state_cur.from_odom_msg(odom_msg)
+        state_cur = State2D(odom_msg = odom_msg)
 
         # We first get the control command from the buffer
         self.publish_control(state_cur)

@@ -6,7 +6,7 @@ class State2D():
     '''
     2D vehicle state
     '''
-    def __init__(self) -> None:
+    def __init__(self, odom_msg = None) -> None:
 
         self.t = 0 # time stamp
         self.x = 0 #x position
@@ -21,6 +21,9 @@ class State2D():
         self.v = 0
 
         self.initialized = False
+        
+        if odom_msg is not None:
+            self.from_odom_msg(odom_msg)
 
     def from_odom_msg(self, odom_msg):
         '''
