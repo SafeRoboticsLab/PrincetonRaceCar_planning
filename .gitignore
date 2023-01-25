@@ -51,3 +51,11 @@ qtcreator-*
 CATKIN_IGNORE
 
 scripts/planner/fig
+
+*/build*
+*/devel*
+*/.catkin_workspace
+*/__pycache__
+*.pyc
+*vscode
+*DS_Store
