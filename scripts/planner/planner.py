@@ -56,18 +56,16 @@ class PlanningRecedingHorizon():
         
         # Read ROS topic names to subscribe 
         self.odom_topic = get_ros_param('~odom_topic', '/slam_pose')
-        self.path_topic = get_ros_param('~path_topic', '/planning/path')
+        self.path_topic = get_ros_param('~path_topic', '/Routing/Path')
         self.obstacle_topic = get_ros_param('~obstacle_topic', '/prediction/obstacles')
         
         # Read ROS topic names to publish
         self.control_topic = get_ros_param('~control_topic', '/control/servo_control')
-        self.traj_topic = get_ros_param('~traj_topic', '/planning/trajectory')
+        self.traj_topic = get_ros_param('~traj_topic', '/Planning/Trajectory')
         # self.if_pub_control = get_ros_param('~publish_control', False)
         
         # Read Planning parameters
-        self.predefined_path = get_ros_param('~predefined_path', False)
         # if true, the planner will load a path from a file rather than subscribing to a path topic
-        self.path_file = get_ros_param('~path_file', None)
         self.path_width_left = get_ros_param('~path_width_L', 0.5)
         self.path_width_right = get_ros_param('~path_width_R', 0.5)
         self.path_loop = get_ros_param('~path_loop', False)
@@ -114,18 +112,8 @@ class PlanningRecedingHorizon():
         This function sets up the subscriber for the odometry and path
         '''
         self.pose_sub = rospy.Subscriber(self.odom_topic, Odometry, self.odometry_callback, queue_size=1)
-        # self.obstacle_sub = rospy.Subscriber(self.obstacle_topic, ObstacleMsg, self.obstacle_callback, queue_size=1)
-        if self.predefined_path:
-            if os.path.isabs(self.path_file):
-                path_center_line = self.load_path(self.path_file)
-            else:
-                path_center_line = self.load_path(os.path.join(self.package_path, self.path_file))
-            
-            path = RefPath(path_center_line, self.path_width_left, self.path_width_right, self.path_loop)
-            self.path_buffer.writeFromNonRT(path)
-        else:
-            # self.path_sub = rospy.Subscriber(self.path_topic, numpy_msg(PathMsg), self.path_callback, queue_size=1)
-            pass
+
+        self.path_sub = rospy.Subscriber(self.path_topic, PathMsg, self.path_callback, queue_size=1)
 
     def setup_service(self):
         '''
@@ -170,29 +158,22 @@ class PlanningRecedingHorizon():
         pass
     
     def path_callback(self, path_msg):
-        pass
-    
-    def load_path(self, filepath: str):
-        """
-        Gets the centerline of the track from the trajectory data. We currently only
-        support 2D track.
-
-        Args:
-            filepath (str): the path to file consisting of the centerline position.
-
-        Returns:
-            np.ndarray: centerline, of the shape (2, N).
-        """
         x = []
         y = []
-        with open(filepath) as f:
-            spamreader = csv.reader(f, delimiter=',')
-            for i, row in enumerate(spamreader):
-                if i > 0:
-                    x.append(float(row[0]))
-                    y.append(float(row[1]))
-
-        return np.array([x, y])
+        width_L = []
+        width_R = []
+        speed_limit = []
+        
+        for waypoint in path_msg.poses:
+            x.append(waypoint.pose.position.x)
+            y.append(waypoint.pose.position.y)
+            width_L.append(waypoint.pose.orientation.x)
+            width_R.append(waypoint.pose.orientation.y)
+            speed_limit.append(waypoint.pose.orientation.z)
+                    
+        centerline = np.array([x, y])
+        ref_path = RefPath(centerline, width_L, width_R, speed_limit, loop=False)
+        self.path_buffer.writeFromNonRT(ref_path)
     
     def publish_control(self, state: State2D):
         
@@ -257,6 +238,11 @@ class PlanningRecedingHorizon():
                     # Replan use ilqr
                     state_vec = state_cur.state_vector(self.prev_delta)
                     new_plan = self.planner.plan(state_vec, init_controls, verbose=False)
+                    
+                    plan_status = new_plan['status']
+                    if plan_status == -1:
+                        rospy.logwarn_once("No path specified!")
+                        continue
                     
                     if self.planner_stopped:
                         # Since the planner was previously stopped, we need to reset the time

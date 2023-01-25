@@ -72,7 +72,7 @@ class Config():
         self.dim_closest_pt_y = 1 # dimension of closest point y in the reference
         self.dim_path_slope = 2 # dimension of path slope in the reference
         self.path_cost_type = 'quadratic' # 'quadratic' or 'huber'
-        self.path_weight = 2.0 # weight for the path deviation cost
+        self.path_weight = 5.0 # weight for the path deviation cost
         self.path_huber_delta = 2 # huber loss delta for path deviation cost
 
         # Velocity Cost
@@ -95,20 +95,20 @@ class Config():
         self.dim_right_boundary = 5 # dimension of lane boundary in the reference
         self.dim_left_boundary = 6 # dimension of lane boundary in the reference
         self.lane_boundary_a = 20.0 # parameter for lane boundary cost
-        self.lane_boundary_b = 1.0 # parameter for ExpLinear Cost
+        self.lane_boundary_b = 2.0 # parameter for ExpLinear Cost
         
         ########        Control Cost          ############
         
         self.ctrl_cost_type = 'quadratic' # 'quadratic' or 'huber'
         # those value should not be too small
-        self.ctrl_cost_accel_weight = 0.25
-        self.ctrl_cost_steer_weight = 0.25
+        self.ctrl_cost_accel_weight = 0.5
+        self.ctrl_cost_steer_weight = 0.2
         self.ctrl_cost_accel_huber_delta = 1.0 # huber loss delta
         self.ctrl_cost_steer_huber_delta = 1.0 # huber loss delta
         
         ########        Obstacle Cost          ############
         self.obs_a = 10.0 # parameter for obstacle cost
-        self.obs_b = 2.0 # parameter for ExpLinear Cost
+        self.obs_b = 10.0 # parameter for ExpLinear Cost
                 
     def load_config(self, config_path):
         with open(config_path, 'r') as f:

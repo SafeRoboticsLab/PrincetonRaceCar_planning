@@ -78,8 +78,12 @@ class iLQR():
 
 	def plan(self, init_state: np.ndarray, 
 				controls: Optional[np.ndarray] = None, verbose=False) -> Dict:
-		t_start = time.time()
 		
+		# We first check if the planner is ready
+		if self.ref_path is None:
+			return dict(status=-1)
+		
+		t_start = time.time()
 		'''
 		Main iLQR loop.
 		Args:
@@ -353,7 +357,7 @@ class iLQR():
 		centerline[0,:] = 1 * np.cos(theta)
 		centerline[1,:] = 1 * np.sin(theta)
 
-		self.ref_path = RefPath(centerline, 0.5, 0.5, True)
+		self.ref_path = RefPath(centerline, 0.5, 0.5, 1, True)
 
 		# add obstacle
 		obs = np.array([[0, 0, 0.5, 0.5], [1, 1.5, 1, 1.5]]).T
