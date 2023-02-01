@@ -33,7 +33,7 @@ class StateCost(BaseCost):
             raise_error(config.path_cost_type, 'PATH_COST')
             
         # Reference Velocity Cost
-        self.dim_vel_ref = config.dim_vel_ref
+        self.v_ref = config.v_ref
         self.vel_weight = config.vel_weight
         self.vel_delta = config.vel_huber_delta
         if config.vel_cost_type == 'quadratic':
@@ -42,6 +42,11 @@ class StateCost(BaseCost):
             self.vel_cost_func = huber_cost
         else:
             raise_error(config.vel_cost_type, 'VEL_COST')
+            
+        # Speed Limit Cost
+        self.dim_vel_limit = config.dim_vel_limit
+        self.vel_limit_a = config.vel_limit_a
+        self.vel_limit_b = config.vel_limit_b
         
         # Lateral Acceleration Cost
         self.wheelbase = config.wheelbase
@@ -49,6 +54,14 @@ class StateCost(BaseCost):
         self.lat_accel_a = config.lat_accel_a # float
         self.lat_accel_b = config.lat_accel_b # float
         self.lat_accel_cost_func = exp_linear_cost
+        
+        # Cost against large heading difference with reference
+        self.heading_weight = config.heading_weight
+        self.heading_huber_delta = config.heading_huber_delta
+        if config.heading_cost_type == 'quadratic':
+            self.heading_cost_func = quadratic_cost
+        elif config.heading_cost_type == 'huber':
+            self.heading_cost_func = huber_cost
         
         # Progress Cost
         self.dim_progress = config.dim_progress
@@ -106,6 +119,15 @@ class StateCost(BaseCost):
 
         boundary_cost = exp_linear_cost(b_right, self.lane_boundary_a, self.lane_boundary_b) + \
                         exp_linear_cost(b_left, self.lane_boundary_a, self.lane_boundary_b)
+                        
+        # Cost for the vehicle's deviation from the reference heading
+        delta_heading = state[3] - slope
+        delta_heading = jnp.arctan2(jnp.sin(delta_heading), jnp.cos(delta_heading))
+        heading_cost = self.heading_cost_func(delta_heading, self.heading_weight, self.heading_huber_delta)
+        
+        # Cost for speed limit
+        speed_limit = ref[self.dim_vel_limit]
+        speed_limit_cost = exp_linear_cost(state[2]-speed_limit, self.vel_limit_a, self.vel_limit_b)
         
         # Progress cost
         # This is always zero due to the way the closest point is calculated
@@ -113,7 +135,7 @@ class StateCost(BaseCost):
         progress_cost = -self.progress_weight*(cr*(state[0] - closest_pt_x) + sr*(state[1] - closest_pt_y))
         
         # Cost for the vehicle's deviation from the reference velocity
-        vel_ref = ref[self.dim_vel_ref]
+        vel_ref = jnp.minimum(ref[self.dim_vel_limit], self.v_ref)
         vel_dev = state[2] - vel_ref
         vel_cost = self.vel_cost_func(vel_dev, self.vel_weight, self.vel_delta)
         
@@ -127,4 +149,6 @@ class StateCost(BaseCost):
         # jax.debug.print('{a}, {b}, {c}, {d}',a=path_cost, b=vel_cost, c=lat_accel_cost, d=progress_cost)
 
         
-        return path_cost + vel_cost + lat_accel_cost + progress_cost + boundary_cost
+        return path_cost + vel_cost + \
+                lat_accel_cost + heading_cost + \
+                speed_limit_cost+progress_cost + boundary_cost

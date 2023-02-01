@@ -61,6 +61,8 @@ class Config():
         self.a_max = 5.0 # maximum acceleration
         self.a_min = -5.0 # minimum acceleration
         
+        # reference velocity
+        self.v_ref = 1.0 # reference velocity
         ####################################################
         ########## Parameters for iLQR COST ################
         ####################################################
@@ -76,10 +78,19 @@ class Config():
         self.path_huber_delta = 2 # huber loss delta for path deviation cost
 
         # Velocity Cost
-        self.dim_vel_ref = 3 # dimension of reference velocity in the reference
         self.vel_cost_type = 'quadratic' # 'quadratic' or 'huber'
         self.vel_weight = 2.0 # weight for the velocity cost
         self.vel_huber_delta = 1 # huber loss delta for velocity cost
+        
+        # Speed Limit Cost
+        self.dim_vel_limit = 3 # dimension of reference velocity in the reference
+        self.vel_limit_a = 10.0 # parameter for speed limit cost
+        self.vel_limit_b = 1.0 # parameter for ExpLinear Cost
+        
+        # Heading Cost
+        self.heading_cost_type = 'quadratic' # 'quadratic' or 'huber'
+        self.heading_weight = 1 # weight for the heading cost
+        self.heading_huber_delta = 1 # huber loss delta for heading cost
 
         # Lateral Acceleration Cost
         # We use ExpLinearCost for lateral acceleration cost
@@ -89,12 +100,12 @@ class Config():
 
         # Progress Cost
         self.dim_progress = 4 # dimension of progress in the reference
-        self.progress_weight = 1.0  # weight for the progress cost
+        self.progress_weight = 0  # weight for the progress cost
 
         # Lane Boundary Cost
         self.dim_right_boundary = 5 # dimension of lane boundary in the reference
         self.dim_left_boundary = 6 # dimension of lane boundary in the reference
-        self.lane_boundary_a = 20.0 # parameter for lane boundary cost
+        self.lane_boundary_a = 30.0 # parameter for lane boundary cost
         self.lane_boundary_b = 2.0 # parameter for ExpLinear Cost
         
         ########        Control Cost          ############
@@ -102,7 +113,7 @@ class Config():
         self.ctrl_cost_type = 'quadratic' # 'quadratic' or 'huber'
         # those value should not be too small
         self.ctrl_cost_accel_weight = 0.5
-        self.ctrl_cost_steer_weight = 0.2
+        self.ctrl_cost_steer_weight = 0.3
         self.ctrl_cost_accel_huber_delta = 1.0 # huber loss delta
         self.ctrl_cost_steer_huber_delta = 1.0 # huber loss delta
         
