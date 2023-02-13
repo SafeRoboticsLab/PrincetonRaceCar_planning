@@ -305,7 +305,6 @@ class iLQR():
 
 				V_x = Q_x + Ks[:,:,n].T @ Q_u + Q_ux.T @ ks[:, n] + Ks[:,:,n].T @ Q_uu @ ks[:, n] 
 				V_xx = Q_xx +  Ks[:, :, n].T @ Q_ux+ Q_ux.T @ Ks[:, :, n] + Ks[:, :, n].T @ Q_uu @ Ks[:, :, n]
-    
 				return V_x, V_xx, ks, Ks, n-1, reg
 			return jax.lax.cond(isposdef(Q_uu_reg, reg), true_func, false_func, (Ks, ks))
 
@@ -320,6 +319,78 @@ class iLQR():
 		
 		V_x, V_xx, ks, Ks, n, reg = jax.lax.while_loop(cond_fun, backward_pass_looper,(V_x, V_xx, ks, Ks, n, reg))
 		return Ks, ks, reg
+
+	# @partial(jax.jit, static_argnums=(0,))
+	# def backward_pass(
+	# 		self, c_x: DeviceArray, c_u: DeviceArray, c_xx: DeviceArray,
+	# 		c_uu: DeviceArray, c_ux: DeviceArray, fx: DeviceArray, fu: DeviceArray,
+	# 		reg: float
+	# ) -> Tuple[DeviceArray, DeviceArray]:
+	# 	"""
+	# 	Jitted backward pass looped computation.
+
+	# 	Args:
+	# 			c_x (DeviceArray): (dim_x, N)
+	# 			c_u (DeviceArray): (dim_u, N)
+	# 			c_xx (DeviceArray): (dim_x, dim_x, N)
+	# 			c_uu (DeviceArray): (dim_u, dim_u, N)
+	# 			c_ux (DeviceArray): (dim_u, dim_x, N)
+	# 			fx (DeviceArray): (dim_x, dim_x, N-1)
+	# 			fu (DeviceArray): (dim_x, dim_u, N-1)
+
+	# 	Returns:
+	# 			Ks (DeviceArray): gain matrices (dim_u, dim_x, N - 1)
+	# 			ks (DeviceArray): gain vectors (dim_u, N - 1)
+	# 	"""
+	# 	def init():
+	# 		Ks = jnp.zeros((self.dim_u, self.dim_x, self.n - 1))
+	# 		ks = jnp.zeros((self.dim_u, self.n - 1))
+	# 		V_x = c_x[:, -1]
+	# 		V_xx = c_xx[:, :, -1]
+	# 		return V_x, V_xx, ks, Ks
+
+	# 	@jax.jit
+	# 	def backward_pass_looper(val):
+	# 		V_x, V_xx, ks, Ks, n, reg = val
+
+	# 		Q_x = c_x[:, n] + fx[:, :, n].T @ V_x
+	# 		Q_u = c_u[:, n] + fu[:, :, n].T @ V_x
+	# 		Q_xx = c_xx[:, :, n] + fx[:, :, n].T @ V_xx @ fx[:, :, n]
+	# 		Q_ux = c_ux[:, :, n] + fu[:, :, n].T @ V_xx @ fx[:, :, n]
+	# 		Q_uu = c_uu[:, :, n] + fu[:, :, n].T @ V_xx @ fu[:, :, n]
+
+	# 		min_eigen = jnp.min(jnp.linalg.eigvalsh(Q_uu))
+
+	# 		reg = jax.lax.cond(min_eigen < 0, lambda x: 1-min_eigen, lambda x: 0.0, reg)
+
+	# 		# According to the paper, the regularization is added to Vxx for robustness.
+	# 		# http://roboticexplorationlab.org/papers/iLQR_Tutorial.pdf
+	# 		reg_mat = reg* jnp.eye(self.dim_x)
+	# 		V_xx_reg = V_xx + reg_mat
+	# 		Q_ux_reg = c_ux[:, :, n] + fu[:, :, n].T @ V_xx_reg @ fx[:, :, n]
+	# 		Q_uu_reg = c_uu[:, :, n] + fu[:, :, n].T @ V_xx_reg @ fu[:, :, n]
+
+	# 		Q_uu_reg_inv = jnp.linalg.inv(Q_uu_reg)
+	# 		jax.debug.print("Before {x}, After {y}",x = min_eigen, y = jnp.min(jnp.linalg.eigvalsh(Q_uu_reg)))
+	# 		Ks = Ks.at[:, :, n].set(-Q_uu_reg_inv @ Q_ux_reg)
+	# 		ks = ks.at[:, n].set(-Q_uu_reg_inv @ Q_u)
+
+	# 		V_x = Q_x + Ks[:,:,n].T @ Q_u + Q_ux.T @ ks[:, n] + Ks[:,:,n].T @ Q_uu @ ks[:, n] 
+	# 		V_xx = Q_xx +  Ks[:, :, n].T @ Q_ux+ Q_ux.T @ Ks[:, :, n] + Ks[:, :, n].T @ Q_uu @ Ks[:, :, n]
+	# 		return V_x, V_xx, ks, Ks, n-1, reg
+
+	# 	@jax.jit
+	# 	def cond_fun(val):
+	# 		_, _, _, _, n, _ = val
+	# 		return n>=0
+
+	# 	# Initializes.
+	# 	V_x, V_xx, ks, Ks = init()
+	# 	n = self.n - 2
+		
+	# 	V_x, V_xx, ks, Ks, n, reg = jax.lax.while_loop(cond_fun, backward_pass_looper,(V_x, V_xx, ks, Ks, n, reg))
+	# 	return Ks, ks, reg
+
 
 	@partial(jax.jit, static_argnums=(0,))
 	def rollout(
