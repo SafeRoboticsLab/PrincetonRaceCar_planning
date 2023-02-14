@@ -2,9 +2,14 @@ import rospy
 from geometry_msgs.msg import PoseStamped
 from tf.transformations import quaternion_from_euler
 
-def get_ros_param(param_name, default):
+def get_ros_param(param_name: str, default):
     '''
     Read a parameter from the ROS parameter server. If the parameter does not exist, return the default value.
+    Args:
+        param_name: string, name of the parameter
+        default: default value
+    Return:
+        value of the parameter
     '''
     if rospy.has_param(param_name):
         return rospy.get_param(param_name)
@@ -21,7 +26,6 @@ def get_ros_param(param_name, default):
         else:
             rospy.logwarn("Parameter '%s' not found, using default: %s", param_name, default)
             return default
-        
 
 def state_to_pose_stamped(state, t, frame_id='map'):
     '''

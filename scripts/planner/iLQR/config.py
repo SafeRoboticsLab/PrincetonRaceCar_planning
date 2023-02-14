@@ -8,7 +8,7 @@ class Config():
         ####################################################
         self.num_dim_x = 5
         self.num_dim_u = 2
-        self.n = 10 # horizon length
+        self.T = 10 # horizon length
         self.dt = 0.1 # time step
         self.platform = "cpu" # "cpu" or "gpu" or "tpu"
         

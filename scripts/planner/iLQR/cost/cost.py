@@ -2,6 +2,7 @@ import jax
 from jax import numpy as jnp
 import numpy as np
 from jaxlib.xla_extension import DeviceArray
+from typing import Union
 
 from .state_cost import StateCost
 from .control_cost import ControlCost
@@ -18,43 +19,82 @@ class Cost():
         self.obstacle_cost = ObstacleCost(config)
     
     def get_traj_cost(
-			self, states: DeviceArray, ctrls: DeviceArray, refs: DeviceArray, obs_refs: DeviceArray = None
+			self, trajectory: Union[np.ndarray, DeviceArray], 
+            controls: Union[np.ndarray, DeviceArray], 
+            path_refs: Union[np.ndarray, DeviceArray], 
+            obs_refs: list = None
 	) -> float:
         '''
-		Given a state, control, and time index, return the sum of the cost.
+		Given a state, control, and references, return the sum of the cost.
 		Input:
-			states: (dim_x, N) List of states
-			ctrls: (dim_u, N) List of controls
-			refs: (dim_ref, N) List of references
-			time_indices: (1, N) List of time indices
+			trajectory: (dim_x, N) array of state trajectory
+			controls: (dim_u, N) array of control sequence
+			path_refs: (dim_ref, N) array of references (e.g. reference path, reference velocity, etc.)
+			obs_refs: -Optional- (num_obstacle, 2, N) List of obstacles
 		return:
-			cost: float
+			cost: float, sum of the running cost over the trajectory
 		'''
         
-        state_cost = self.state_cost.get_traj_cost(states, ctrls, refs)
+        state_cost = self.state_cost.get_traj_cost(trajectory, controls, path_refs)
         
-        control_cost = self.control_cost.get_traj_cost(states, ctrls, refs)
+        control_cost = self.control_cost.get_traj_cost(trajectory, controls, path_refs)
         
-        obstacle_cost = self.obstacle_cost.get_traj_cost(states, ctrls, obs_refs)
+        obstacle_cost = self.obstacle_cost.get_traj_cost(trajectory, controls, obs_refs)
         
         return state_cost + control_cost + obstacle_cost
-
+    
     def get_derivatives(
-			self, states: DeviceArray, ctrls: DeviceArray, refs: DeviceArray, obs_refs: DeviceArray = None
-	) -> DeviceArray:
-        # Get Jacobians and Hessians of each cost function then sum them up
+			self, trajectory: Union[np.ndarray, DeviceArray], 
+            controls: Union[np.ndarray, DeviceArray], 
+            path_refs: Union[np.ndarray, DeviceArray], 
+            obs_refs: list = None
+	) -> tuple:
+        '''
+		Given a state, control, and references, return Jacobians and Hessians of cost function
+		Input:
+			trajectory: (dim_x, N) array of state trajectory
+			controls: (dim_u, N) array of control sequence
+			path_refs: (dim_ref, N) array of references (e.g. reference path, reference velocity, etc.)
+			obs_refs: -Optional- (num_obstacle, 2, N) List of obstacles
+		return:
+			q: DeviceArray, jacobian of cost function w.r.t. trajectory
+            r: DeviceArray, jacobian of cost function w.r.t. controls
+            Q: DeviceArray, hessian of cost function w.r.t. trajectory
+            R: DeviceArray, hessian of cost function w.r.t. controls
+            H: DeviceArray, hessian of cost function w.r.t. trajectory and controls
+		'''
         
-        (state_cx, state_cu, state_cxx, 
-            state_cuu, state_cux) = self.state_cost.get_derivatives(states, ctrls, refs)
+        (state_q, state_r, state_Q, 
+            state_R, state_H) = self.state_cost.get_derivatives(trajectory, controls, path_refs)
         
-        (ctrl_cx, ctrl_cu, ctrl_cxx,
-            ctrl_cuu, ctrl_cux) = self.control_cost.get_derivatives(states, ctrls, refs)
+        (ctrl_q, ctrl_r, ctrl_Q,
+            ctrl_R, ctrl_H) = self.control_cost.get_derivatives(trajectory, controls, path_refs)
         
-        (obs_cx, obs_cu, obs_cxx, 
-            obs_cuu, obs_cux) = self.obstacle_cost.get_derivatives(states, ctrls, obs_refs)
+        (obs_q, obs_r, obs_Q, 
+            obs_R, obs_H) = self.obstacle_cost.get_derivatives(trajectory, controls, obs_refs)
         
-        return (state_cx + ctrl_cx + obs_cx,
-                state_cu + ctrl_cu + obs_cu,
-                state_cxx + ctrl_cxx + obs_cxx,
-                state_cuu + ctrl_cuu + obs_cuu,
-                state_cux + ctrl_cux + obs_cux)
+        return (state_q + ctrl_q + obs_q,
+                state_r + ctrl_r + obs_r,
+                state_Q + ctrl_Q + obs_Q,
+                state_R + ctrl_R + obs_R,
+                state_H + ctrl_H + obs_H)
+        
+    def get_derivatives_np(
+			self, trajectory: np.ndarray, controls: np.ndarray, path_refs: np.ndarray, obs_refs: list = None
+	) -> tuple:
+        '''
+		Given a state, control, and references, return Jacobians and Hessians of cost function
+		Input:
+			trajectory: (dim_x, N) array of state trajectory
+			controls: (dim_u, N) array of control sequence
+			path_refs: (dim_ref, N) array of references (e.g. reference path, reference velocity, etc.)
+			obs_refs: -Optional- (num_obstacle, 2, N) List of obstacles
+		return:
+			q: np.ndarray, jacobian of cost function w.r.t. trajectory
+            r: np.ndarray, jacobian of cost function w.r.t. controls
+            Q: np.ndarray, hessian of cost function w.r.t. trajectory
+            R: np.ndarray, hessian of cost function w.r.t. controls
+            H: np.ndarray, hessian of cost function w.r.t. trajectory and controls
+		'''
+        q, r, Q, R, H = self.get_derivatives(trajectory, controls, path_refs, obs_refs)
+        return np.asarray(q), np.asarray(r), np.asarray(Q), np.asarray(R), np.asarray(H)

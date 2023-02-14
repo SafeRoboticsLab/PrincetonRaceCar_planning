@@ -65,7 +65,7 @@ class StateCost(BaseCost):
         
         # Progress Cost
         self.dim_progress = config.dim_progress
-        self.progress_weight = config.progress_weight/(config.n * config.dt)
+        self.progress_weight = config.progress_weight/(config.T * config.dt)
 
         # Boundary Cost
         self.width = config.width
@@ -146,8 +146,6 @@ class StateCost(BaseCost):
         lat_accel_cost = self.lat_accel_cost_func(lat_accel,
                                     self.lat_accel_a,
                                     self.lat_accel_b)
-        # jax.debug.print('{a}, {b}, {c}, {d}',a=path_cost, b=vel_cost, c=lat_accel_cost, d=progress_cost)
-
         
         return path_cost + vel_cost + \
                 lat_accel_cost + heading_cost + \

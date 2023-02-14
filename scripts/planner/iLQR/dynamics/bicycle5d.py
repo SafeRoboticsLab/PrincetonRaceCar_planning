@@ -48,8 +48,11 @@ class Bicycle5D():
 									[self.v_min, self.v_max],
 									[-jnp.inf, jnp.inf],
 									[self.delta_min, self.delta_max]])
-
-	def integrate_forward(
+	
+	###############################################################################
+	################ 				Numpy Function			 ######################
+	############################################################################### 
+	def integrate_forward_np(
 		self, state: np.ndarray, control: np.ndarray, **kwargs
 	) -> Tuple[np.ndarray, np.ndarray]:
 		"""
@@ -61,13 +64,105 @@ class Bicycle5D():
 			control (np.ndarray) [2].
 
 		Returns:
-			np.ndarray: next state. [5]
-			np.ndarray: clipped control. [2]
+			state_next: np.ndarray: next state. [5]
+			control_clip: np.ndarray: clipped control. [2]
 		"""
-		state_nxt, ctrl_clip = self.integrate_forward_jax(
-			jnp.asarray(state), jnp.asarray(control)
-		)
+		state_nxt, ctrl_clip = self.integrate_forward_jax(state, control)
 		return np.asarray(state_nxt), np.asarray(ctrl_clip)
+
+	def get_jacobian_np(
+		self, trajectory: DeviceArray, controls: DeviceArray
+	) -> Tuple[np.ndarray, np.ndarray]:
+		"""
+		Returns the linearized 'A' and 'B' matrix of the ego vehicle around
+		nominal trajectory and controls.
+
+		Args:
+			trajectory (DeviceArray): trajectory along the nominal trajectory.
+			controls (DeviceArray): controls along the trajectory.
+
+		Returns:
+			np.ndarray: the Jacobian of the dynamics w.r.t. the state.
+			np.ndarray: the Jacobian of the dynamics w.r.t. the control.
+		"""
+		A_jax, B_jax = self.get_jacobian_jax(trajectory, controls)
+		return np.asarray(A_jax), np.asarray(B_jax)
+
+	def rollout_nominal_np(
+			self, initial_state: np.ndarray, controls: DeviceArray
+	) -> Tuple[DeviceArray, DeviceArray]:
+		'''
+		Rolls out the nominal trajectory Given the controls and initial state.
+
+		Args:
+			initial_state (np.ndarray): initial state.
+			controls (np.ndarray): controls.
+
+		Returns:
+			trajectory (np.ndarray): roll out trajectory along the nominal trajectory.
+			ctrls_clip (np.ndarray): clipped control sequence
+		'''
+		trajectory, ctrls_clip = self.rollout_nominal_jax(initial_state, controls)
+		return np.asarray(trajectory), np.asarray(ctrls_clip)
+
+	###############################################################################
+	################ 				Jax Function			 ######################
+	###############################################################################
+	@partial(jax.jit, static_argnums=(0,))
+	def rollout_nominal_jax(
+			self, initial_state: np.ndarray, controls: np.ndarray,
+	) -> Tuple[DeviceArray, DeviceArray]:
+		'''
+		Rolls out the nominal trajectory Given the controls and initial state.
+
+		Args:
+			initial_state (np.ndarray): initial state.
+			controls (np.ndarray): controls.
+
+		Returns:
+			trajectory (DeviceArray): roll out trajectory along the nominal trajectory.
+			ctrls_clip (DeviceArray): clipped control sequence
+		'''
+		n = controls.shape[1]
+		@jax.jit
+		def _rollout_nominal_step(i, args):
+			trajectory, controls = args
+			x_nxt, u_clip = self.integrate_forward_jax(trajectory[:, i], controls[:, i])
+			trajectory = trajectory.at[:, i + 1].set(x_nxt)
+			controls = controls.at[:, i].set(u_clip)
+			return trajectory, controls
+
+		trajectory = jnp.zeros((self.dim_x, n))
+		trajectory = trajectory.at[:, 0].set(initial_state)
+		trajectory, ctrls_clip = jax.lax.fori_loop(
+				0, n - 1, _rollout_nominal_step, (trajectory, controls)
+		)
+
+		# Make the heading angle in [-pi, pi]
+		trajectory.at[3,:].set(
+			jnp.mod(trajectory[3, :] + jnp.pi, 2 * jnp.pi) - jnp.pi
+		)
+		return trajectory, ctrls_clip
+
+	@partial(jax.jit, static_argnums=(0,))
+	def get_jacobian_jax(
+		self, trajectory: DeviceArray, controls: DeviceArray
+	) -> Tuple[DeviceArray, DeviceArray]:
+		"""
+		Returns the linearized 'A' and 'B' matrix of the ego vehicle around
+		nominal trajectory and controls.
+
+		Args:
+			trajectory (DeviceArray): trajectory along the nominal trajectory.
+			controls (DeviceArray): controls along the trajectory.
+
+		Returns:
+			A (DeviceArray): the Jacobian of the dynamics w.r.t. the state.
+			B (DeviceArray): the Jacobian of the dynamics w.r.t. the control.
+		"""
+		_jac = jax.jacfwd(self._integrate_forward, argnums=[0, 1])
+		jac = jax.jit(jax.vmap(_jac, in_axes=(1, 1), out_axes=(2, 2)))
+		return jac(trajectory, controls)
 
 	@partial(jax.jit, static_argnums=(0,))
 	def integrate_forward_jax(
@@ -96,6 +191,9 @@ class Bicycle5D():
 		state_nxt = jnp.clip(state_nxt, self.state_limits[:, 0], self.state_limits[:, 1])
 		return state_nxt, ctrl_clip
 
+	###############################################################################
+	################ Helper functions for the dynamics model ######################
+	###############################################################################
 	@partial(jax.jit, static_argnums=(0,))
 	def deriv(self, state: DeviceArray, control: DeviceArray) -> DeviceArray:
 		""" Computes the continuous system dynamics x_dot = f(x, u).
@@ -162,50 +260,4 @@ class Bicycle5D():
 		k4 = self.deriv(state + k3*dt, control)
 		return state + (k1 + 2*k2 + 2*k3 + k4) * dt / 6
 
-	@partial(jax.jit, static_argnums=(0,))
-	def get_jacobian(
-		self, nominal_states: DeviceArray, nominal_controls: DeviceArray
-	) -> Tuple[DeviceArray, DeviceArray]:
-		"""
-		Returns the linearized 'A' and 'B' matrix of the ego vehicle around
-		nominal states and controls.
 
-		Args:
-			nominal_states (DeviceArray): states along the nominal trajectory.
-			nominal_controls (DeviceArray): controls along the trajectory.
-
-		Returns:
-			DeviceArray: the Jacobian of the dynamics w.r.t. the state.
-			DeviceArray: the Jacobian of the dynamics w.r.t. the control.
-		"""
-		_jac = jax.jacfwd(self._integrate_forward, argnums=[0, 1])
-		jac = jax.jit(jax.vmap(_jac, in_axes=(1, 1), out_axes=(2, 2)))
-		return jac(nominal_states, nominal_controls)
-
-	@partial(jax.jit, static_argnums=(0,))
-	def rollout_nominal(
-			self, initial_state: np.ndarray, controls: DeviceArray
-	) -> Tuple[DeviceArray, DeviceArray]:
-		'''
-		Rolls out the nominal trajectory Givent the controls and initial state.
-		'''
-		n = controls.shape[1]
-		@jax.jit
-		def _rollout_nominal_step(i, args):
-			states, ctrls = args
-			x_nxt, u_clip = self.integrate_forward_jax(states[:, i], ctrls[:, i])
-			states = states.at[:, i + 1].set(x_nxt)
-			ctrls = ctrls.at[:, i].set(u_clip)
-			return states, ctrls
-
-		states = jnp.zeros((self.dim_x, n))
-		states = states.at[:, 0].set(initial_state)
-		states, ctrls_clip = jax.lax.fori_loop(
-				0, n - 1, _rollout_nominal_step, (states, controls)
-		)
-
-		# Make the heading angle in [-pi, pi]
-		states.at[3,:].set(
-			jnp.mod(states[3, :] + jnp.pi, 2 * jnp.pi) - jnp.pi
-		)
-		return states, ctrls_clip

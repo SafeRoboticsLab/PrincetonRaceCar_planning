@@ -252,9 +252,9 @@ class PlanningRecedingHorizon():
                     
                     if self.planner_ready:
                         # If stop planning is called, we will not write to the buffer
-                        new_policy = Policy(new_plan['states'], new_plan['controls'],
+                        new_policy = Policy(new_plan['trajectory'], new_plan['controls'],
                                             new_plan['K_closed_loop'], t_cur, 
-                                            self.planner.dt, self.planner.n)
+                                            self.planner.dt, self.planner.T)
                         self.policy_buffer.writeFromNonRT(new_policy)
 
                         self.t_last_replan = t_cur

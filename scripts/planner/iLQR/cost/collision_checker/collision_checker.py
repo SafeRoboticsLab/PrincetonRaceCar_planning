@@ -13,7 +13,7 @@ class CollisionChecker:
         self.width = config.width
         self.length = config.length
         self.wheelbase = config.wheelbase
-        self.step = config.n
+        self.step = config.T
         
         # create a box for the vehicle
         # The vehicle is centered at its rear axle

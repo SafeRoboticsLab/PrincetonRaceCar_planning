@@ -44,63 +44,63 @@ class BaseCost(ABC):
 
 	@partial(jax.jit, static_argnums=(0,))
 	def get_traj_cost(
-			self, states: DeviceArray, ctrls: DeviceArray, refs: DeviceArray
+			self, trajectory: DeviceArray, controls: DeviceArray, path_refs: DeviceArray
 	) -> float:
 		'''
 		Given a state, control, and time index, return the sum of the cost.
 		Input:
-			states: (dim_x, N) List of states
-			ctrls: (dim_u, N) List of controls
-			refs: (dim_ref, N) List of references
+			trajectory: (dim_x, N) List of trajectory
+			controls: (dim_u, N) List of controls
+			path_refs: (dim_ref, N) List of references
 			time_indices: (1, N) List of time indices
 		return:
 			cost: float
 		'''
 		running_costs = jax.vmap(self.get_running_cost,
-						in_axes=(1, 1, 1))(states, ctrls, refs)
-		terminal_cost = self.get_terminal_cost(refs)
+						in_axes=(1, 1, 1))(trajectory, controls, path_refs)
+		terminal_cost = self.get_terminal_cost(path_refs)
 		return jnp.sum(running_costs).astype(float) + terminal_cost
 
 	@partial(jax.jit, static_argnums=(0,))
 	def get_derivatives(
-			self, states: DeviceArray, ctrls: DeviceArray, refs: DeviceArray
+			self, trajectory: DeviceArray, controls: DeviceArray, path_refs: DeviceArray
 	) -> DeviceArray:
 		return (
-				self.get_cx(states, ctrls, refs),
-				self.get_cu(states, ctrls, refs),
-				self.get_cxx(states, ctrls, refs),
-				self.get_cuu(states, ctrls, refs),
-				self.get_cux(states, ctrls, refs),
+				self.get_cx(trajectory, controls, path_refs),
+				self.get_cu(trajectory, controls, path_refs),
+				self.get_cxx(trajectory, controls, path_refs),
+				self.get_cuu(trajectory, controls, path_refs),
+				self.get_cux(trajectory, controls, path_refs),
 		)
 
 	@partial(jax.jit, static_argnums=(0,))
 	def get_cx(
-			self, states: DeviceArray, ctrls: DeviceArray, refs: DeviceArray
+			self, trajectory: DeviceArray, controls: DeviceArray, path_refs: DeviceArray
 	) -> DeviceArray:
 		'''
 		Given a state, control, and time index, return the jacobian of cost w.r.t the state.
 		Input:
-			states: (dim_x, N) List of states
-			ctrls: (dim_u, N) List of controls
-			refs: (dim_ref, N) List of references
+			trajectory: (dim_x, N) List of trajectory
+			controls: (dim_u, N) List of controls
+			path_refs: (dim_ref, N) List of references
 			time_indices: (1, N) List of time indices
 		return:
 			dc_dx: (dim_x, N)
 		'''
 		_cx = jax.jacfwd(self.get_running_cost, argnums=0)
 		return jax.vmap(_cx, in_axes=(1, 1, 1),
-					out_axes=1)(states, ctrls, refs)
+					out_axes=1)(trajectory, controls, path_refs)
 
 	@partial(jax.jit, static_argnums=(0,))
 	def get_cu(
-			self, states: DeviceArray, ctrls: DeviceArray, refs: DeviceArray
+			self, trajectory: DeviceArray, controls: DeviceArray, path_refs: DeviceArray
 	) -> DeviceArray:
 		'''
 		Given a state, control, and time index, return the jacobian of cost w.r.t the control.
 		Input:
-			states: (dim_x, N) List of states
-			ctrls: (dim_u, N) List of controls
-			refs: (dim_ref, N) List of references
+			trajectory: (dim_x, N) List of trajectory
+			controls: (dim_u, N) List of controls
+			path_refs: (dim_ref, N) List of references
 			time_indices: (1, N) List of time indices
 		return:
 			dc_du: (dim_u, N)
@@ -108,77 +108,77 @@ class BaseCost(ABC):
 
 		_cu = jax.jacfwd(self.get_running_cost, argnums=1)
 		return jax.vmap(_cu, in_axes=(1, 1, 1),
-					out_axes=1)(states, ctrls, refs)
+					out_axes=1)(trajectory, controls, path_refs)
 
 	@partial(jax.jit, static_argnums=(0,))
 	def get_cxx(
-			self, states: DeviceArray, ctrls: DeviceArray, refs: DeviceArray
+			self, trajectory: DeviceArray, controls: DeviceArray, path_refs: DeviceArray
 	) -> DeviceArray:
 		'''
 		Given a state, control, and time index, return the hessian of cost w.r.t the state.
 		Input:
-			states: (dim_x, N) List of states
-			ctrls: (dim_u, N) List of controls
-			refs: (dim_ref, N) List of references
+			trajectory: (dim_x, N) List of trajectory
+			controls: (dim_u, N) List of controls
+			path_refs: (dim_ref, N) List of references
 			time_indices: (1, N) List of time indices
 		return:
 			d^2c_dx^2: (dim_x, dim_x, N)
 		'''
 		_cxx = jax.jacfwd(jax.jacrev(self.get_running_cost, argnums=0), argnums=0)
 		return jax.vmap(_cxx, in_axes=(1, 1, 1),
-					out_axes=2)(states, ctrls, refs)
+					out_axes=2)(trajectory, controls, path_refs)
 
 	@partial(jax.jit, static_argnums=(0,))
 	def get_cuu(
-			self, states: DeviceArray, ctrls: DeviceArray, refs: DeviceArray
+			self, trajectory: DeviceArray, controls: DeviceArray, path_refs: DeviceArray
 	) -> DeviceArray:
 		'''
 		Given a state, control, and time index, return the hessian of cost w.r.t the control.
 		Input:
-			states: (dim_x, N) List of states
-			ctrls: (dim_u, N) List of controls
-			refs: (dim_ref, N) List of references
+			trajectory: (dim_x, N) List of trajectory
+			controls: (dim_u, N) List of controls
+			path_refs: (dim_ref, N) List of references
 			time_indices: (1, N) List of time indices
 		return:
 			d^2c_du^2: (dim_u, dim_u, N)
 		'''
 		_cuu = jax.jacfwd(jax.jacrev(self.get_running_cost, argnums=1), argnums=1)
 		return jax.vmap(_cuu, in_axes=(1, 1, 1),
-					out_axes=2)(states, ctrls, refs)
+					out_axes=2)(trajectory, controls, path_refs)
 
 	@partial(jax.jit, static_argnums=(0,))
 	def get_cux(
-			self, states: DeviceArray, ctrls: DeviceArray, refs: DeviceArray
+			self, trajectory: DeviceArray, controls: DeviceArray, path_refs: DeviceArray
 	) -> DeviceArray:
 		'''
 		Given a state, control, and time index, return the hessian of cost w.r.t the control and state.
 		Input:
-			states: (dim_x, N) List of states
-			ctrls: (dim_u, N) List of controls
-			refs: (dim_ref, N) List of references
+			trajectory: (dim_x, N) List of trajectory
+			controls: (dim_u, N) List of controls
+			path_refs: (dim_ref, N) List of references
 			time_indices: (1, N) List of time indices
 		return:
 			d^2c_dux: (dim_u, dim_x, N)
 		'''
 		_cux = jax.jacfwd(jax.jacrev(self.get_running_cost, argnums=1), argnums=0)
 		return jax.vmap(_cux, in_axes=(1, 1, 1),
-					out_axes=2)(states, ctrls, refs)
+					out_axes=2)(trajectory, controls, path_refs)
 
 	@partial(jax.jit, static_argnums=(0,))
 	def get_cxu(
-			self, states: DeviceArray, ctrls: DeviceArray, refs: DeviceArray
+			self, trajectory: DeviceArray, controls: DeviceArray, path_refs: DeviceArray
 	) -> DeviceArray:
 		'''
 		Given a state, control, and time index, return the hessian of cost w.r.t the control and state.
 		Input:
-			states: (dim_x, N) List of states
-			ctrls: (dim_u, N) List of controls
-			refs: (dim_ref, N) List of references
+			trajectory: (dim_x, N) List of trajectory
+			controls: (dim_u, N) List of controls
+			path_refs: (dim_ref, N) List of references
 			time_indices: (1, N) List of time indices
 		return:
 			d^2c_dxu: (dim_x, dim_u, N)
 		'''
-		return self.get_cux(states, ctrls, refs).T
+		return self.get_cux(trajectory, controls, path_refs).T
 
 
 @jax.jit

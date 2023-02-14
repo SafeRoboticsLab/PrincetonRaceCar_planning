@@ -169,14 +169,14 @@ class RefPath:
 
     def local2global(self, local_states: np.ndarray, return_slope=False) -> np.ndarray:
         """
-        Transforms states in the local frame to the global frame (x, y) position.
+        Transforms trajectory in the local frame to the global frame (x, y) position.
 
         Args:
-            local_states (np.ndarray): The first row is the progress of the states
+            local_states (np.ndarray): The first row is the progress of the trajectory
                 and the second row is the lateral deviation.
 
         Returns:
-            np.ndarray: states in the global frame.
+            np.ndarray: trajectory in the global frame.
         """
         flatten = False
         if local_states.ndim == 1:
@@ -202,7 +202,7 @@ class RefPath:
 
     def global2local(self, global_states: np.ndarray) -> np.ndarray:
         """
-        Transforms states in the global frame to the local frame (progress, lateral
+        Transforms trajectory in the global frame to the local frame (progress, lateral
         deviation).
 
         Args:
@@ -210,7 +210,7 @@ class RefPath:
                 second row is the y position.
 
         Returns:
-            np.ndarray: states in the local frame.
+            np.ndarray: trajectory in the local frame.
         """
         flatten = False
         if global_states.ndim == 1:

@@ -55,7 +55,7 @@ class SingleObstacleCost(BaseCost):
 
         y= -1*jnp.sign(dis_ref)*y   
 
-        # Do not calculate gradient w.r.t velocity
+        # Do not calrlate gradient w.r.t velocity
         v_no_grad = jax.lax.stop_gradient(state[2])
         obs_b = self.obs_b#*jnp.maximum(v_no_grad, 1)
         
@@ -66,14 +66,14 @@ class ObstacleCost():
         self.single_obstacle_cost = SingleObstacleCost(config)
         
     def get_traj_cost(
-			self, states: DeviceArray, ctrls: DeviceArray, obs_refs: np.ndarray
+			self, trajectory: DeviceArray, controls: DeviceArray, obs_refs: np.ndarray
 	) -> float:
         '''
 		Given a state, control, and time index, return the sum of the cost.
 		Input:
-			states: (dim_x, N) List of states
-			ctrls: (dim_u, N) List of controls
-			refs: (num_obstacle, dim_ref, N) List of references
+			trajectory: (dim_x, N) List of trajectory
+			controls: (dim_u, N) List of controls
+			path_refs: (num_obstacle, dim_ref, N) List of references
 		return:
 			cost: float
 		'''
@@ -84,27 +84,27 @@ class ObstacleCost():
                     "There maybe performance issue due to sliceing []")
             num_obstacle = obs_refs.shape[0]
             for i in range(num_obstacle):
-                cost += self.single_obstacle_cost.get_traj_cost(states, ctrls, obs_refs[i, :, :])
+                cost += self.single_obstacle_cost.get_traj_cost(trajectory, controls, obs_refs[i, :, :])
         return cost
 
     def get_derivatives(
-            self, states: DeviceArray, ctrls: DeviceArray, obs_refs: DeviceArray
+            self, trajectory: DeviceArray, controls: DeviceArray, obs_refs: DeviceArray
     ) -> DeviceArray:
         
-        cx = 0
-        cu = 0
-        cxx = 0
-        cuu = 0
-        cux = 0
+        q = 0
+        r = 0
+        Q = 0
+        R = 0
+        H = 0
         
         if obs_refs is not None:
             num_obstacle = obs_refs.shape[0]
             
             for i in range(num_obstacle):
-                cx_, cu_, cxx_, cuu_, cux_ = self.single_obstacle_cost.get_derivatives(states, ctrls, obs_refs[i])
-                cx += cx_
-                cu += cu_
-                cxx += cxx_
-                cuu += cuu_
-                cux += cux_
-        return (cx, cu, cxx, cuu, cux)
+                cx_, r_, Q_, R_, H_ = self.single_obstacle_cost.get_derivatives(trajectory, controls, obs_refs[i])
+                q += cx_
+                r += r_
+                Q += Q_
+                R += R_
+                H += H_
+        return (q, r, Q, R, H)

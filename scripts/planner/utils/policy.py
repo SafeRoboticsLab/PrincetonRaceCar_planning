@@ -12,14 +12,14 @@ class Policy():
         self.K = K
         self.t0 = t0
         self.dt = dt
-        self.N = N
+        self.T = N
     
     def get_policy(self, t):
         '''
         Return the policy at time t
         '''
         i = self.get_index(t)
-        if i>= (self.N-1):
+        if i>= (self.T-1):
             rospy.logwarn("Try to retrive policy beyond horizon")
             x_i =np.zeros_like(self.nominal_x[:,-1])
             u_i = np.zeros_like(self.nominal_u[:,0])
@@ -40,11 +40,11 @@ class Policy():
         Return the nominal control at time t and forward
         '''
         i = self.get_index(t)
-        if i>= self.N:
+        if i>= self.T:
             return None
         else:
             ref_u = np.zeros_like(self.nominal_u)
-            ref_u[:,:self.N-i] = self.nominal_u[:,i:]
+            ref_u[:,:self.T-i] = self.nominal_u[:,i:]
 
             return ref_u
         
@@ -53,15 +53,15 @@ class Policy():
         traj_msg.header.frame_id = frame_id
         traj_msg.header.stamp = rospy.Time.from_sec(self.t0)
         
-        states = self.nominal_x
-        for i in range(self.N):
+        trajectory = self.nominal_x
+        for i in range(self.T):
             t = self.t0 + i * self.dt
-            pose = state_to_pose_stamped(states[:,i], t, frame_id)
+            pose = state_to_pose_stamped(trajectory[:,i], t, frame_id)
             traj_msg.poses.append(pose)
 
         return traj_msg
     
     def __str__(self) -> str:
-        return f"Policy: t0: {self.t0}, dt: {self.dt}, N: {self.N}\n"+\
+        return f"Policy: t0: {self.t0}, dt: {self.dt}, N: {self.T}\n"+\
                 f"nominal_x: {self.nominal_x}\n"+\
                 f"nominal_u: {self.nominal_u}\n"
