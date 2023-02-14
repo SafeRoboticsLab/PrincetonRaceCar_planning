@@ -135,13 +135,16 @@ class iLQR():
 			# So we calculate the derivatives from 0 to N-1 and Backward pass will ignore the last one.
 			t0 = time.time()
 			A, B = self.dyn.get_jacobian_jax(trajectory, controls)
+			fxx, fuu, fux = self.dyn.get_hessian_jax(trajectory, controls)
 			t_dyn_der += (time.time()-t0)
 			num_dyn_der += 1
 			
 			#Backward pass with new regularization.
 			t0 = time.time()
 			K_closed_loop, k_open_loop, reg = self.backward_pass(
-				q=q, r=r, Q=Q, R=R, H=H, A=A, B=B, reg = reg
+				q=q, r=r, Q=Q, R=R, H=H, A=A, B=B, 
+				fxx = fxx, fuu = fuu, fux = fux,
+				reg = reg
 			)
 			t_back += (time.time()-t0)
 			num_back += 1
@@ -238,7 +241,8 @@ class iLQR():
 	def backward_pass(
 			self, q: DeviceArray, r: DeviceArray, Q: DeviceArray,
 			R: DeviceArray, H: DeviceArray, A: DeviceArray, B: DeviceArray,
-			reg: float
+			fxx: DeviceArray, fuu: DeviceArray, fux: DeviceArray, 
+			reg: float, ddp: bool = True
 	) -> Tuple[DeviceArray, DeviceArray]:
 		"""
 		Jitted backward pass looped computation.
@@ -266,19 +270,18 @@ class iLQR():
 		@jax.jit
 		def backward_pass_looper(val):
 			V_x, V_xx, ks, Ks, t, reg = val
-
 			Q_x = q[:, t] + A[:, :, t].T @ V_x
 			Q_u = r[:, t] + B[:, :, t].T @ V_x
-			Q_xx = Q[:, :, t] + A[:, :, t].T @ V_xx @ A[:, :, t]
-			Q_ux = H[:, :, t] + B[:, :, t].T @ V_xx @ A[:, :, t]
-			Q_uu = R[:, :, t] + B[:, :, t].T @ V_xx @ B[:, :, t]
+			Q_xx = Q[:, :, t] + A[:, :, t].T @ V_xx @ A[:, :, t] + ddp*jnp.tensordot(V_x, fxx[:, :, :, t], axes=1)
+			Q_ux = H[:, :, t] + B[:, :, t].T @ V_xx @ A[:, :, t] + ddp*jnp.tensordot(V_x, fux[:, :, :, t], axes=1)
+			Q_uu = R[:, :, t] + B[:, :, t].T @ V_xx @ B[:, :, t] + ddp*jnp.tensordot(V_x, fuu[:, :, :, t], axes=1)
 
 			# According to the paper, the regularization is added to Vxx for robustness.
 			# http://roboticexplorationlab.org/papers/iLQR_Tutorial.pdf
 			reg_mat = reg* jnp.eye(self.dim_x)
 			V_xx_reg = V_xx + reg_mat
-			Q_ux_reg = H[:, :, t] + B[:, :, t].T @ V_xx_reg @ A[:, :, t]
-			Q_uu_reg = R[:, :, t] + B[:, :, t].T @ V_xx_reg @ B[:, :, t]
+			Q_ux_reg = H[:, :, t] + B[:, :, t].T @ V_xx_reg @ A[:, :, t] + ddp*jnp.tensordot(V_x, fux[:, :, :, t], axes=1)
+			Q_uu_reg = R[:, :, t] + B[:, :, t].T @ V_xx_reg @ B[:, :, t] + ddp*jnp.tensordot(V_x, fuu[:, :, :, t], axes=1)
 
 			@jax.jit
 			def isposdef(A, reg):

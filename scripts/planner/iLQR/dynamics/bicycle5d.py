@@ -165,6 +165,30 @@ class Bicycle5D():
 		return jac(trajectory, controls)
 
 	@partial(jax.jit, static_argnums=(0,))
+	def get_hessian_jax(
+		self, trajectory: DeviceArray, controls: DeviceArray
+	) -> Tuple[DeviceArray, DeviceArray]:
+		"""
+		Returns the linearized 'A' and 'B' matrix of the ego vehicle around
+		nominal trajectory and controls.
+
+		Args:
+			trajectory (DeviceArray): trajectory along the nominal trajectory.
+			controls (DeviceArray): controls along the trajectory.
+
+		Returns:
+			A (DeviceArray): the Jacobian of the dynamics w.r.t. the state.
+			B (DeviceArray): the Jacobian of the dynamics w.r.t. the control.
+		"""
+		_fxx = jax.jacfwd(jax.jacrev(self._integrate_forward, argnums=0), argnums=0)
+		_fuu = jax.jacfwd(jax.jacrev(self._integrate_forward, argnums=1), argnums=1)
+		_fux = jax.jacfwd(jax.jacrev(self._integrate_forward, argnums=1), argnums=0)
+		fxx = jax.jit(jax.vmap(_fxx, in_axes=(1, 1), out_axes=3))(trajectory, controls)
+		fuu = jax.jit(jax.vmap(_fuu, in_axes=(1, 1), out_axes=3))(trajectory, controls)
+		fux = jax.jit(jax.vmap(_fux, in_axes=(1, 1), out_axes=3))(trajectory, controls)
+		return fxx, fuu, fux
+
+	@partial(jax.jit, static_argnums=(0,))
 	def integrate_forward_jax(
 		self, state: DeviceArray, control: DeviceArray
 	) -> Tuple[DeviceArray, DeviceArray]:
