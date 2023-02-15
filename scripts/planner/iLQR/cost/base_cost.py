@@ -62,7 +62,7 @@ class BaseCost(ABC):
 		return jnp.sum(running_costs).astype(float) + terminal_cost
 
 	@partial(jax.jit, static_argnums=(0,))
-	def get_derivatives(
+	def get_derivatives_jax(
 			self, trajectory: DeviceArray, controls: DeviceArray, path_refs: DeviceArray
 	) -> DeviceArray:
 		return (

@@ -10,9 +10,9 @@ from .ref_path import RefPath
 from .config import Config
 import time
 
-status_lookup = ["Iteration Limit Exceed",
-                "Converged",
-                "Failed Line Search"]
+status_lookup = ['Iteration Limit Exceed',
+                'Converged',
+                'Failed Line Search']
 
 class iLQRnp():
 	def __init__(self, config_file = None) -> None:
@@ -20,20 +20,32 @@ class iLQRnp():
 		self.config = Config()  # Load default config.
 		if config_file is not None:
 			self.config.load_config(config_file)  # Load config from file.
-
-		print("iLQR setting:", self.config)
+		
+		self.load_parameters()
+		print('iLQR setting:', self.config)
 
 		# Set up Jax parameters
 		jax.config.update('jax_platform_name', self.config.platform)
-		print("Jax using Platform: ", jax.lib.xla_bridge.get_backend().platform)
+		print('Jax using Platform: ', jax.lib.xla_bridge.get_backend().platform)
 
 		# If you want to use GPU, lower the memory fraction from 90% to avoid OOM.
-		os.environ["XLA_PYTHON_CLIENT_MEM_FRACTION"] = "20"
+		os.environ['XLA_PYTHON_CLIENT_MEM_FRACTION'] = '20'
 
 		self.dyn = Bicycle5D(self.config)
 		self.cost = Cost(self.config)
 		self.ref_path = None
 
+		# collision checker
+		# Note: This will not be used until lab2.
+		self.collision_checker = CollisionChecker(self.config)
+		self.obstacle_list = []
+
+		self.warm_up()
+
+	def load_parameters(self):
+		'''
+		This function defines iLQR parameters from <self.config>.
+		'''
 		# iLQR parameters
 		self.dim_x = self.config.num_dim_x
 		self.dim_u = self.config.num_dim_u
@@ -48,7 +60,7 @@ class iLQRnp():
                                                 self.config.line_search_c)
                                             )
 
-		print("Line Search Alphas: ", self.alphas)
+		print('Line Search Alphas: ', self.alphas)
 
 		# regularization parameters
 		self.reg_min = float(self.config.reg_min)
@@ -57,17 +69,11 @@ class iLQRnp():
 		self.reg_scale_up = float(self.config.reg_scale_up)
 		self.reg_scale_down = float(self.config.reg_scale_down)
 		self.max_attempt = self.config.max_attempt
-
-		# collision checker
-		# Note: This will not be used until lab2.
-		self.collision_checker = CollisionChecker(self.config)
-		self.obstacle_list = []
-
-		self.warm_up()
-
+		
 	def warm_up(self):
-		"""Warm up the jitted functions."""
-
+		'''
+		Warm up the jitted functions.
+		'''
 		# Build a fake path as a 1 meter radius circle.
 		theta = np.linspace(0, 2 * np.pi, 100)
 		centerline = np.zeros([2, 100])
@@ -82,12 +88,12 @@ class iLQRnp():
 		self.update_obstacles(obs_list)
 
 		x_init = np.array([0.0, -1.0, 1, 0, 0])
-		print("Start warm up iLQR...")
+		print('Start warm up iLQR...')
 		# import matplotlib.pyplot as plt
 		self.plan(x_init, verbose=False)
-		print("iLQR warm up finished.")
+		print('iLQR warm up finished.')
 		# plt.plot(plan['trajectory'][0,:], plan['trajectory'][1,:])
-		# print(f"Warm up takes {plan['t_process']} seconds.")
+		# print(f'Warm up takes {plan['t_process']} seconds.')
 		self.ref_path = None
 		self.obstacle_list = []
 
@@ -125,7 +131,8 @@ class iLQRnp():
 		return path_refs, obs_refs
 
 	def plan(self, init_state: np.ndarray,
-				controls: Optional[np.ndarray] = None, verbose=False) -> Dict:
+				controls: Optional[np.ndarray] = None,
+				verbose=False) -> Dict:
 		'''
 		Main iLQR loop.
 		Args:
@@ -136,7 +143,7 @@ class iLQRnp():
 		# We first check if the planner is ready
 		if self.ref_path is None:
 			# TODO: define your own return behavior in case there is no reference path.
-			print("No reference path is provided.")
+			print('No reference path is provided.')
 			return dict(status=-1)
 
 		# if no initial control sequence is provided, we assume it is all zeros.

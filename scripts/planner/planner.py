@@ -65,11 +65,7 @@ class PlanningRecedingHorizon():
         # self.if_pub_control = get_ros_param('~publish_control', False)
         
         # Read Planning parameters
-        # if true, the planner will load a path from a file rather than subscribing to a path topic
-        self.path_width_left = get_ros_param('~path_width_L', 0.5)
-        self.path_width_right = get_ros_param('~path_width_R', 0.5)
-        self.path_loop = get_ros_param('~path_loop', False)
-            
+        # if true, the planner will load a path from a file rather than subscribing to a path topic           
         self.replan_dt = get_ros_param('~replan_dt', 0.1)
         
         self.ilqr_params_file = get_ros_param('~ilqr_params_file', 'configs/ilqr.yaml')
@@ -142,7 +138,6 @@ class PlanningRecedingHorizon():
         """
         Subscriber callback function of the robot pose
         """
-
         # Retrive state needed for planning from the odometry message
         # [x, y, v, w, delta]
         state_cur = State2D(odom_msg = odom_msg)

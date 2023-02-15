@@ -43,7 +43,7 @@ class Cost():
         
         return state_cost + control_cost + obstacle_cost
     
-    def get_derivatives(
+    def get_derivatives_jax(
 			self, trajectory: Union[np.ndarray, DeviceArray], 
             controls: Union[np.ndarray, DeviceArray], 
             path_refs: Union[np.ndarray, DeviceArray], 
@@ -65,13 +65,13 @@ class Cost():
 		'''
         
         (state_q, state_r, state_Q, 
-            state_R, state_H) = self.state_cost.get_derivatives(trajectory, controls, path_refs)
+            state_R, state_H) = self.state_cost.get_derivatives_jax(trajectory, controls, path_refs)
         
         (ctrl_q, ctrl_r, ctrl_Q,
-            ctrl_R, ctrl_H) = self.control_cost.get_derivatives(trajectory, controls, path_refs)
+            ctrl_R, ctrl_H) = self.control_cost.get_derivatives_jax(trajectory, controls, path_refs)
         
         (obs_q, obs_r, obs_Q, 
-            obs_R, obs_H) = self.obstacle_cost.get_derivatives(trajectory, controls, obs_refs)
+            obs_R, obs_H) = self.obstacle_cost.get_derivatives_jax(trajectory, controls, obs_refs)
         
         return (state_q + ctrl_q + obs_q,
                 state_r + ctrl_r + obs_r,
@@ -96,5 +96,5 @@ class Cost():
             R: np.ndarray, hessian of cost function w.r.t. controls
             H: np.ndarray, hessian of cost function w.r.t. trajectory and controls
 		'''
-        q, r, Q, R, H = self.get_derivatives(trajectory, controls, path_refs, obs_refs)
+        q, r, Q, R, H = self.get_derivatives_jax(trajectory, controls, path_refs, obs_refs)
         return np.asarray(q), np.asarray(r), np.asarray(Q), np.asarray(R), np.asarray(H)

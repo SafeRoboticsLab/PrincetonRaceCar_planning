@@ -126,7 +126,7 @@ class iLQR():
 			updated = False
 			# Get the derivatives of the cost 
 			t0 = time.time()
-			q, r, Q, R, H = self.cost.get_derivatives(trajectory, controls, path_refs, obs_refs)
+			q, r, Q, R, H = self.cost.get_derivatives_jax(trajectory, controls, path_refs, obs_refs)
 			t_cost_der += (time.time()-t0)
 			num_cost_der += 1
 			

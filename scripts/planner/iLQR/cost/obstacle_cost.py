@@ -87,7 +87,7 @@ class ObstacleCost():
                 cost += self.single_obstacle_cost.get_traj_cost(trajectory, controls, obs_refs[i, :, :])
         return cost
 
-    def get_derivatives(
+    def get_derivatives_jax(
             self, trajectory: DeviceArray, controls: DeviceArray, obs_refs: DeviceArray
     ) -> DeviceArray:
         
@@ -101,7 +101,7 @@ class ObstacleCost():
             num_obstacle = obs_refs.shape[0]
             
             for i in range(num_obstacle):
-                cx_, r_, Q_, R_, H_ = self.single_obstacle_cost.get_derivatives(trajectory, controls, obs_refs[i])
+                cx_, r_, Q_, R_, H_ = self.single_obstacle_cost.get_derivatives_jax(trajectory, controls, obs_refs[i])
                 q += cx_
                 r += r_
                 Q += Q_
