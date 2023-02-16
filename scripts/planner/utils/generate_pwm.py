@@ -49,13 +49,13 @@ class GeneratePwm():
             v_bounded = v
 
         # negative pwm means turn left (positive steering angle)
-        steer_pwm = -np.clip(steer/0.3, -1, 1)
-
+        # steer_pwm = -np.sign(steer)*np.clip((steer/0.3)**2, 0, 1)
+        steer_pwm = np.clip(steer/0.4, -1, 1)
         accel_bounded = np.sign(accel)*min(abs(accel), 2+v)
-
+        # print(accel, v, accel_bounded, v_bounded, w, np.abs(steer_pwm))
         # Generate Input vector
         input = np.array([[accel_bounded, v_bounded, w, np.abs(steer_pwm)]])
-               
+
         # convert the acceleration and steering angle to PWM
         d = self.mlp_model.predict(input)[0]
         

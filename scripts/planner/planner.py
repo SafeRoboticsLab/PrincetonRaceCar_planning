@@ -7,9 +7,9 @@ import time
 import numpy as np
 import os
 
-from .utils import RealtimeBuffer, get_ros_param, State2D, Policy
-from .iLQR import iLQR, RefPath
-
+from .utils import RealtimeBuffer, get_ros_param, State2D, Policy, GeneratePwm
+from .iLQR import RefPath
+from .iLQR import iLQRnp as iLQR
 from racecar_msgs.msg import ServoMsg #, OdomMsg, PathMsg, ObstacleMsg, PathMsg
 # https://wiki.ros.org/rospy_tutorials/Tutorials/numpy
 # from rospy.numpy_msg import numpy_msg
@@ -26,6 +26,10 @@ class PlanningRecedingHorizon():
     def __init__(self):
 
         self.read_parameters()
+        
+        # Initialize the PWM converter
+        self.pwm_converter = GeneratePwm()
+        
         # set up the optimal control solver
         self.setup_planner()
 
@@ -64,6 +68,11 @@ class PlanningRecedingHorizon():
         self.traj_topic = get_ros_param('~traj_topic', '/Planning/Trajectory')
         # self.if_pub_control = get_ros_param('~publish_control', False)
         
+        # Read the simulation flag, 
+        # if the flag is true, we are in simulation 
+        # and no need to convert the throttle and steering angle to PWM
+        self.simulation = get_ros_param('~simulation', True)
+        
         # Read Planning parameters
         # if true, the planner will load a path from a file rather than subscribing to a path topic           
         self.replan_dt = get_ros_param('~replan_dt', 0.1)
@@ -92,6 +101,7 @@ class PlanningRecedingHorizon():
         self.obstacle_buffer = RealtimeBuffer()
 
         self.prev_delta = 0.0
+        self.prev_u = np.array([0.0,0.0])
 
     def setup_publisher(self):
         '''
@@ -171,32 +181,64 @@ class PlanningRecedingHorizon():
         self.path_buffer.writeFromNonRT(ref_path)
     
     def publish_control(self, state: State2D):
-        
-        servo_msg = ServoMsg()
-        servo_msg.header.stamp = rospy.Time.now()
-            
+        t_cur = rospy.get_rostime().to_sec()
         if self.t_last_state is None:
             dt_state = 0.0
         else:
-            dt_state = state.t - self.t_last_state
+            dt_state = t_cur - self.t_last_state
+        self.t_last_state = t_cur
         
         policy = self.policy_buffer.readFromRT()
         if policy is not None:
-            x_i, u_i, K_i = policy.get_policy(state.t)
-            cur_state_vec = state.state_vector(self.prev_delta)
+            
+            latency = t_cur-state.t
+            x_i, u_i, K_i = policy.get_policy(t_cur)
+            cur_state_vec = state.state_vector_latency(self.prev_delta, self.prev_u, latency)
             dx = (cur_state_vec - x_i)
             dx[3] = np.mod(dx[3] + np.pi, 2 * np.pi) - np.pi
             u = u_i + K_i @ dx
+            accel = u[0]
+            steer = self.prev_delta + u[1]*dt_state
             
-            servo_msg.throttle = u[0]
-            servo_msg.steer = self.prev_delta + u[1]*dt_state
-            self.prev_delta = x_i[-1]
+            # Do pure pursit for steering
+            # x_target, _, _ = policy.get_policy(t_cur+0.5)
+            # goal_robot = np.linalg.inv(
+            #     np.array([[np.cos(x_i[3]), -np.sin(x_i[3]), x_i[0]],
+            #               [np.sin(x_i[3]), np.cos(x_i[3]), x_i[1]],
+            #               [0,0,1]]))@np.array([x_target[0], x_target[1], x_target[2]])
+            
+            # # relative heading angle of the goal wrt the car
+            # alpha = np.arctan2(goal_robot[1], goal_robot[0])
+            
+            # # relative distance between the car and the goal
+            # dis2goal = np.sqrt(goal_robot[0]**2 + goal_robot[1]**2)
+            
+            # steer = np.arctan2(2*0.257*np.sin(alpha), dis2goal)
+            # print(alpha, dis2goal, steer)
+            
+            self.prev_delta = steer
+            self.prev_u = u
         else:
             # apply brake
-            servo_msg.throttle = -5.0
-            servo_msg.steer = 0.0
+            accel = -5.0
+            steer = 0.0
+            self.prev_u = np.array([0.0,0.0])
+            
+        # If we are in simulation,
+        # the throttle and steering angle are acceleration and steering angle
+        if self.simulation:
+            throttle = accel
+        else:
+            # If we are using robot,
+            # the throttle and steering angle needs to convert to PWM signal
+            throttle, steer = self.pwm_converter.convert(accel, steer, state)
+        
+        servo_msg = ServoMsg()
+        servo_msg.header.stamp = rospy.Time.now()
+        servo_msg.throttle = throttle
+        servo_msg.steer = steer
         self.control_pub.publish(servo_msg)
-        self.t_last_state = state.t
+        
 
     def planning_thread(self):
         # time.sleep(5)

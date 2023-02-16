@@ -3,6 +3,7 @@ from scipy.spatial.transform import Rotation as R
 from tf.transformations import euler_from_quaternion
 from nav_msgs.msg import Odometry
 
+
 class State2D():
     '''
     2D vehicle state
@@ -111,6 +112,16 @@ class State2D():
         Return the state vector
         '''
         return np.array([self.x, self.y, self.v_long, self.psi, delta])
+    
+    def state_vector_latency(self, delta, u, dt):
+        # Hardcode to composite for latency
+        x = self.state_vector(delta)
+        dx = np.array([x[2]*np.cos(x[3]),
+                        x[2]*np.sin(x[3]),
+                        0,
+                        x[2]*np.tan(x[4])/0.257,
+                        0])
+        return x+dx*dt
     
     def transformation_matrix(self) -> np.ndarray:
         '''
