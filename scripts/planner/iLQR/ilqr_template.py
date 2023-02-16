@@ -14,7 +14,7 @@ status_lookup = ['Iteration Limit Exceed',
                 'Converged',
                 'Failed Line Search']
 
-class iLQRnp():
+class iLQR():
 	def __init__(self, config_file = None) -> None:
 
 		self.config = Config()  # Load default config.

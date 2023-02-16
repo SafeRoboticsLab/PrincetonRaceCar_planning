@@ -1,16 +1,22 @@
 import hppfcl
 import numpy as np
+from typing import Union
 
 class Obstacle:
-    def __init__(self, time_varying_vertices) -> None:
+    def __init__(self, vertices: Union[np.ndarray, list]) -> None:
         '''
         Constuct a time-varying obstacle from a list of vertices
-        time_varying_vertices: LIST: a list of 2D numpy arrays of shape (n, 2)
+        vertices: LIST: a list of 2D numpy arrays of shape (n, 2)
         '''
-        self.steps = len(time_varying_vertices)
+        self.time_varying = isinstance(vertices, list)
+        if self.time_varying:
+            self.steps = len(vertices)
+        else:
+            self.steps = np.inf
+            vertices = [vertices]
         self.time_varying_obstacle = []
-        for vertices in time_varying_vertices:
-            self.time_varying_obstacle.append(self._construct_collision_object(vertices))        
+        for v in vertices:
+            self.time_varying_obstacle.append(self._construct_collision_object(v))        
         
     def _construct_collision_object(self, vertices):
         """
@@ -32,10 +38,12 @@ class Obstacle:
         vertices[:,-1] = -1
         verts.extend(list(vertices))
         
-        polygon = hppfcl.Convex.convexHull(verts, False, None)
+        polygon = hppfcl.Convex.convexHull(verts, True, None)
         
         return polygon 
     
     def at(self, step):
         assert step < self.steps, f"The step {step} is out of range [0, {self.steps-1}]"
+        if not self.time_varying:
+            step = 0
         return self.time_varying_obstacle[step]
