@@ -236,12 +236,13 @@ class RefPath:
 
     # region: plotting
     def plot_track(self, ax: Optional[matplotlib.axes.Axes] = None,
-                        c: str = 'k', zorder=0, plot_center_line: bool = False):
+                        c: str = 'k', linewidth = 1, zorder=0, plot_center_line: bool = False):
         if ax is None:
             ax = plt.gca()
         # Inner curve.
         ax.plot(
             self.track_bound[0, :], self.track_bound[1, :], c=c, linestyle='-',
+            linewidth = linewidth,
             zorder=zorder
         )
         # Outer curve.
@@ -252,11 +253,12 @@ class RefPath:
         if plot_center_line:
             self.plot_track_center(ax, c=c, zorder=zorder)
 
-    def plot_track_center(self, ax: Optional[matplotlib.axes.Axes] = None, c: str = 'k', zorder=0):
+    def plot_track_center(self, ax: Optional[matplotlib.axes.Axes] = None, c: str = 'k', linewidth = 1, zorder=0):
         if ax is None:
             ax = plt.gca()
         ax.plot(
             self.track_center[0, :], self.track_center[1, :], c=c, linestyle='--',
+            linewidth = linewidth,
             zorder=zorder
         )
 
