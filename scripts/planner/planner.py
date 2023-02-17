@@ -49,6 +49,7 @@ class PlanningRecedingHorizon():
         self.setup_service()
 
         # start planning thread
+        threading.Thread(target=self.control_thread).start()
         threading.Thread(target=self.planning_thread).start()
 
     def read_parameters(self):
@@ -153,12 +154,14 @@ class PlanningRecedingHorizon():
         state_cur = State2D(odom_msg = odom_msg)
 
         # We first get the control command from the buffer
-        if self.planner_ready:
-            self.publish_control(state_cur)
+        # if self.planner_ready:
+        #     self.publish_control(state_cur)
         
         # Add the current state to the buffer
-        # Planning thread will read from the buffer
-        self.plan_state_buffer.writeFromNonRT(state_cur)
+        # Controller thread will read from the buffer
+        # Then it will be processed and add to the planner buffer 
+        # inside the controller thread
+        self.control_state_buffer.writeFromNonRT(state_cur)
 
     def obstacle_callback(self, obstacle_msg):
         pass
@@ -244,7 +247,7 @@ class PlanningRecedingHorizon():
         self.control_pub.publish(servo_msg)
         
     def control_thread(self):
-
+        rate = rospy.Rate(50)
         u_queue = queue.Queue()
         
         # values to keep track of the previous control command
@@ -256,9 +259,12 @@ class PlanningRecedingHorizon():
             dx = np.array([x[2]*np.cos(x[3]),
                         x[2]*np.sin(x[3]),
                         u[0],
-                        x[2]*np.tan(x[4])/0.257,
-                        u[1]])
-            return x + dx*dt
+                        x[2]*np.tan(u[1])/0.257,
+                        0
+                        ])
+            x_new = x + dx*dt
+            x_new[-1] = u[1]
+            return x_new
         
         while not rospy.is_shutdown():
             t_cur = rospy.get_rostime().to_sec()
@@ -266,57 +272,57 @@ class PlanningRecedingHorizon():
             dt = t_cur - t_prev
             
             # publish the control command
-            if dt > 1.0/50.0:
-                policy = self.policy_buffer.readFromRT()
-                accel = 0
-                steer = 0
-                if self.prev_state is not None:
-                    state_cur = dyn_step(prev_state, prev_u, dt)
-                    
-                    if policy is not None:
-                        # get policy
-                        x_ref, u_ref, K = policy.get_policy(t_cur)
-                        dx = state_cur - x_ref
-                        dx[3] = np.mod(dx[3] + np.pi, 2 * np.pi) - np.pi
-                        u = u_ref + K @ dx
-                        accel = u[0]
-                        steer = prev_u[1] + u[1]*dt
+            policy = self.policy_buffer.readFromRT()
+            accel = 0
+            steer = 0
+            state_cur = None
+            if prev_state is not None:
+                state_cur = dyn_step(prev_state, prev_u, dt)
                 
-                # generate control command
-                if self.simulation:
-                    throttle = accel
-                else:
-                    # If we are using robot,
-                    # the throttle and steering angle needs to convert to PWM signal
-                    throttle, steer = self.pwm_converter.convert(accel, steer, state_cur[2])
-                
-                # publish control command
-                servo_msg = ServoMsg()
-                servo_msg.header.stamp = rospy.Time.now()
-                servo_msg.throttle = throttle
-                servo_msg.steer = steer
-                self.control_pub.publish(servo_msg)
-                
-                u_record = np.array([accel, steer, t_cur])
-                u_queue.put(prev_u)
-                
-                # update the values for the next iteration
-                prev_u = u_record
-                prev_state = state_cur
+                if policy is not None:
+                    # get policy
+                    x_ref, u_ref, K = policy.get_policy(t_cur)
+                    dx = state_cur - x_ref
+                    dx[3] = np.mod(dx[3] + np.pi, 2 * np.pi) - np.pi
+                    u = u_ref + K @ dx
+                    accel = u[0]
+                    steer = prev_u[1] + u[1]*dt
+            
+            # generate control command
+            if self.simulation:
+                throttle = accel
+            else:
+                # If we are using robot,
+                # the throttle and steering angle needs to convert to PWM signal
+                throttle, steer = self.pwm_converter.convert(accel, steer, state_cur[2])
+            
+            # publish control command
+            servo_msg = ServoMsg()
+            servo_msg.header.stamp = rospy.Time.now()
+            servo_msg.throttle = throttle
+            servo_msg.steer = steer
+            self.control_pub.publish(servo_msg)
+            
+            u_record = np.array([accel, steer, t_cur])
+            u_queue.put(prev_u)
+            
+            # update the values for the next iteration
+            prev_u = u_record
+            prev_state = state_cur
                 
             # check if there is new state available
             if self.control_state_buffer.new_data_available:
                 new_slam_state = self.control_state_buffer.readFromRT()
                 t_prev = new_slam_state.t
-                state_cur = new_slam_state.state_vector()
                 
                 delta = 0
                 while not u_queue.empty() and u_queue.queue[0][-1] < t_prev:
                     u = u_queue.get() # remove old control commands
                     delta = u[1]
+                state_cur = new_slam_state.state_vector(delta)
                 
                 # update the state buffer for the planning thread
-                plan_state = np.append(new_slam_state.state_vector(delta), t_prev)
+                plan_state = np.append(state_cur, t_prev)
                 self.plan_state_buffer.writeFromNonRT(plan_state)
                 
                 # update the current state use the new slam state
@@ -326,6 +332,8 @@ class PlanningRecedingHorizon():
                     state_cur = dyn_step(state_cur, u, dt)                
                 prev_state = state_cur
             # end of while loop
+            rate.sleep()
+            
 
     def planning_thread(self):
         # time.sleep(5)
