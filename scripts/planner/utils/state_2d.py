@@ -107,11 +107,14 @@ class State2D():
         
         self.initialized = True
 
-    def state_vector(self, delta) -> np.ndarray:
+    def state_vector(self, delta = None) -> np.ndarray:
         '''
         Return the state vector
         '''
-        return np.array([self.x, self.y, self.v_long, self.psi, delta])
+        if delta is None:
+            return np.array([self.x, self.y, self.v_long, self.psi])
+        else:
+            return np.array([self.x, self.y, self.v_long, self.psi, delta])
     
     def state_vector_latency(self, delta, u, dt):
         # Hardcode to composite for latency

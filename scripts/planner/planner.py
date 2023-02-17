@@ -16,7 +16,7 @@ from racecar_msgs.msg import ServoMsg #, OdomMsg, PathMsg, ObstacleMsg, PathMsg
 from nav_msgs.msg import Odometry
 from nav_msgs.msg import Path as PathMsg # used to display the trajectory on RVIZ
 from std_srvs.srv import Empty, EmptyResponse
-
+import queue
 
 class PlanningRecedingHorizon():
     '''
@@ -95,7 +95,8 @@ class PlanningRecedingHorizon():
         self.planner = iLQR(ilqr_params_abs_path)
 
         # create buffers to handle multi-threading
-        self.state_buffer = RealtimeBuffer()
+        self.plan_state_buffer = RealtimeBuffer()
+        self.control_state_buffer = RealtimeBuffer()
         self.policy_buffer = RealtimeBuffer()
         self.path_buffer = RealtimeBuffer()
         self.obstacle_buffer = RealtimeBuffer()
@@ -118,7 +119,6 @@ class PlanningRecedingHorizon():
         This function sets up the subscriber for the odometry and path
         '''
         self.pose_sub = rospy.Subscriber(self.odom_topic, Odometry, self.odometry_callback, queue_size=1)
-
         self.path_sub = rospy.Subscriber(self.path_topic, PathMsg, self.path_callback, queue_size=1)
 
     def setup_service(self):
@@ -153,11 +153,12 @@ class PlanningRecedingHorizon():
         state_cur = State2D(odom_msg = odom_msg)
 
         # We first get the control command from the buffer
-        self.publish_control(state_cur)
+        if self.planner_ready:
+            self.publish_control(state_cur)
         
         # Add the current state to the buffer
         # Planning thread will read from the buffer
-        self.state_buffer.writeFromNonRT(state_cur)
+        self.plan_state_buffer.writeFromNonRT(state_cur)
 
     def obstacle_callback(self, obstacle_msg):
         pass
@@ -177,8 +178,11 @@ class PlanningRecedingHorizon():
             speed_limit.append(waypoint.pose.orientation.z)
                     
         centerline = np.array([x, y])
-        ref_path = RefPath(centerline, width_L, width_R, speed_limit, loop=False)
-        self.path_buffer.writeFromNonRT(ref_path)
+        try:
+            ref_path = RefPath(centerline, width_L, width_R, speed_limit, loop=False)
+            self.path_buffer.writeFromNonRT(ref_path)
+        except:
+            rospy.logwarn("Invalid path received! Move your robot and retry!")
     
     def publish_control(self, state: State2D):
         t_cur = rospy.get_rostime().to_sec()
@@ -189,11 +193,11 @@ class PlanningRecedingHorizon():
         self.t_last_state = t_cur
         
         policy = self.policy_buffer.readFromRT()
-        if policy is not None:
-            
+        if policy is not None:    
             latency = t_cur-state.t
+            
             x_i, u_i, K_i = policy.get_policy(t_cur)
-            cur_state_vec = state.state_vector_latency(self.prev_delta, self.prev_u, latency)
+            cur_state_vec = state.state_vector_latency(self.prev_delta, self.prev_u, latency+0.05)
             dx = (cur_state_vec - x_i)
             dx[3] = np.mod(dx[3] + np.pi, 2 * np.pi) - np.pi
             u = u_i + K_i @ dx
@@ -239,16 +243,99 @@ class PlanningRecedingHorizon():
         servo_msg.steer = steer
         self.control_pub.publish(servo_msg)
         
+    def control_thread(self):
+
+        u_queue = queue.Queue()
+        
+        # values to keep track of the previous control command
+        prev_state = None
+        prev_u = np.zeros(3) # [accel, steer, t]
+        
+        # helper function to compute the next state
+        def dyn_step(x, u, dt):
+            dx = np.array([x[2]*np.cos(x[3]),
+                        x[2]*np.sin(x[3]),
+                        u[0],
+                        x[2]*np.tan(x[4])/0.257,
+                        u[1]])
+            return x + dx*dt
+        
+        while not rospy.is_shutdown():
+            t_cur = rospy.get_rostime().to_sec()
+            t_prev = prev_u[-1]
+            dt = t_cur - t_prev
+            
+            # publish the control command
+            if dt > 1.0/50.0:
+                policy = self.policy_buffer.readFromRT()
+                accel = 0
+                steer = 0
+                if self.prev_state is not None:
+                    state_cur = dyn_step(prev_state, prev_u, dt)
+                    
+                    if policy is not None:
+                        # get policy
+                        x_ref, u_ref, K = policy.get_policy(t_cur)
+                        dx = state_cur - x_ref
+                        dx[3] = np.mod(dx[3] + np.pi, 2 * np.pi) - np.pi
+                        u = u_ref + K @ dx
+                        accel = u[0]
+                        steer = prev_u[1] + u[1]*dt
+                
+                # generate control command
+                if self.simulation:
+                    throttle = accel
+                else:
+                    # If we are using robot,
+                    # the throttle and steering angle needs to convert to PWM signal
+                    throttle, steer = self.pwm_converter.convert(accel, steer, state_cur[2])
+                
+                # publish control command
+                servo_msg = ServoMsg()
+                servo_msg.header.stamp = rospy.Time.now()
+                servo_msg.throttle = throttle
+                servo_msg.steer = steer
+                self.control_pub.publish(servo_msg)
+                
+                u_record = np.array([accel, steer, t_cur])
+                u_queue.put(prev_u)
+                
+                # update the values for the next iteration
+                prev_u = u_record
+                prev_state = state_cur
+                
+            # check if there is new state available
+            if self.control_state_buffer.new_data_available:
+                new_slam_state = self.control_state_buffer.readFromRT()
+                t_prev = new_slam_state.t
+                state_cur = new_slam_state.state_vector()
+                
+                delta = 0
+                while not u_queue.empty() and u_queue.queue[0][-1] < t_prev:
+                    u = u_queue.get() # remove old control commands
+                    delta = u[1]
+                
+                # update the state buffer for the planning thread
+                plan_state = np.append(new_slam_state.state_vector(delta), t_prev)
+                self.plan_state_buffer.writeFromNonRT(plan_state)
+                
+                # update the current state use the new slam state
+                for i in range(u_queue.qsize()):
+                    u = u_queue.queue[i]
+                    dt = u[-1] - t_prev
+                    state_cur = dyn_step(state_cur, u, dt)                
+                prev_state = state_cur
+            # end of while loop
 
     def planning_thread(self):
         # time.sleep(5)
         rospy.loginfo("Planning thread started waiting for ROS service calls...")
         while not rospy.is_shutdown():
             # determine if we need to replan
-            if self.state_buffer.new_data_available:
-                state_cur = self.state_buffer.readFromRT()
+            if self.plan_state_buffer.new_data_available:
+                state_cur = self.plan_state_buffer.readFromRT()
             
-                t_cur = state_cur.t
+                t_cur = state_cur[-1] # the last element is the time
                 dt = t_cur - self.t_last_replan
 
                 # Do replanning
@@ -273,8 +360,7 @@ class PlanningRecedingHorizon():
                         rospy.logdebug("Path updated!")
                     
                     # Replan use ilqr
-                    state_vec = state_cur.state_vector(self.prev_delta)
-                    new_plan = self.planner.plan(state_vec, init_controls, verbose=False)
+                    new_plan = self.planner.plan(state_cur[:-1], init_controls, verbose=False)
                     
                     plan_status = new_plan['status']
                     if plan_status == -1:

@@ -29,7 +29,7 @@ class GeneratePwm():
         self.min_throttle = get_ros_param('~min_throttle', -0.3)
         self.model_path = get_ros_param('~PWM_model', 'model.pkl')
         
-    def convert(self, accel: float, steer: float, state: State2D):
+    def convert(self, accel: float, steer: float, v: float, w: float = 0):
         '''
         convert the acceleration and steering angle to PWM given the current state
         Parameters:

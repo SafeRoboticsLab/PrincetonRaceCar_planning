@@ -5,11 +5,11 @@
     <arg name="obstacle_topic"      default="/Prediction/Obstacles" doc="ROS topic for obstacles"/>
     <arg name="traj_topic"          default="/Planning/Trajectory"  doc="ROS topic for trajectory"/>
     <arg name="path_topic"          default="/Routing/Path"         doc="ROS topic for reference path"/>
-    <arg name="pub_rate"            default="30"                    doc="rate at which to publish the pose"/>
+    <arg name="pub_rate"            default="20"                    doc="rate at which to publish the pose"/>
     <arg name="init_x"              default="2"                     doc="initial x position"/>
     <arg name="init_y"              default="0.15"                  doc="initial y position"/>
     <arg name="init_yaw"            default="0"                     doc="initial z position"/>
-    <arg name="lane_change_cost"    default="1"                     doc="cost of lane change"/>
+    <arg name="lane_change_cost"    default="2"                     doc="cost of lane change"/>
     <arg name="replan_dt"           default="0.1"                   doc="time step for replanning"/>
     <arg name="ilqr_config"    default=""                      doc="path to ilqr config file"/>
 
@@ -22,7 +22,7 @@
         <arg name="init_y"                  value="$(arg init_y)" />
         <arg name="init_yaw"                value="$(arg init_yaw)" />
         <arg name="enable_routing"          value="true" />
-        <arg name="lane_change_cost"    value="$(arg lane_change_cost)"/>
+        <arg name="lane_change_cost"        value="$(arg lane_change_cost)"/>
     </include>
 
     <node pkg="traj_planning_ros" type="traj_planning_node.py" name="traj_planning" output="$(arg output)">
