@@ -20,10 +20,7 @@ class Policy():
         '''
         i = self.get_index(t)
         if i>= (self.T-1):
-            rospy.logwarn("Try to retrive policy beyond horizon")
-            x_i =np.zeros_like(self.nominal_x[:,-1])
-            u_i = np.zeros_like(self.nominal_u[:,0])
-            K_i = np.zeros_like(self.K[:,:,0])
+            return None, None, None
         else:
             x_i = self.nominal_x[:,i]
             u_i = self.nominal_u[:,i]

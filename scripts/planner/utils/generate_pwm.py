@@ -29,7 +29,7 @@ class GeneratePwm():
         self.min_throttle = get_ros_param('~min_throttle', -0.3)
         self.model_path = get_ros_param('~PWM_model', 'model.pkl')
         
-    def convert(self, accel: float, steer: float, v: float, w: float = 0):
+    def convert(self, accel: float, steer: float, v: float):
         '''
         convert the acceleration and steering angle to PWM given the current state
         Parameters:
@@ -37,9 +37,6 @@ class GeneratePwm():
             steer: float, steering angle of the robot [rad]
             state: State2D, current state of the robot
         '''
-        # Bound the acceleration to the maximum 
-        v = state.v_long 
-        w = state.w
 
         # Do not allow the car to go over 3m/s
         if v > 3:
@@ -47,21 +44,26 @@ class GeneratePwm():
             v_bounded = 3
         else: 
             v_bounded = v
-
+        
         # negative pwm means turn left (positive steering angle)
-        # steer_pwm = -np.sign(steer)*np.clip((steer/0.3)**2, 0, 1)
-        steer_pwm = np.clip(steer/0.4, -1, 1)
+        steer_pwm = np.clip(steer/0.35, -1, 1)
         accel_bounded = np.sign(accel)*min(abs(accel), 2+v)
         # print(accel, v, accel_bounded, v_bounded, w, np.abs(steer_pwm))
         # Generate Input vector
-        input = np.array([[accel_bounded, v_bounded, w, np.abs(steer_pwm)]])
+        input = np.array([[accel_bounded, v_bounded, np.abs(steer_pwm)]])
+        
+        # check nan
+        if np.any(np.isnan(input)):
+            rospy.logwarn("Contain NAN in control!")
+            return self.min_throttle, steer_pwm
 
         # convert the acceleration and steering angle to PWM
         d = self.mlp_model.predict(input)[0]
         
         # clip the throttle to the maximum and minimum throttle
         throttle_pwm = np.clip(d, self.min_throttle, self.max_throttle)
-                
+        if v<0.2:
+            throttle_pwm += np.abs(steer_pwm)*0.04
         return throttle_pwm, steer_pwm
         
         

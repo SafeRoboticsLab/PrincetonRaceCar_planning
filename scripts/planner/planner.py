@@ -119,8 +119,8 @@ class PlanningRecedingHorizon():
         '''
         This function sets up the subscriber for the odometry and path
         '''
-        self.pose_sub = rospy.Subscriber(self.odom_topic, Odometry, self.odometry_callback, queue_size=1)
-        self.path_sub = rospy.Subscriber(self.path_topic, PathMsg, self.path_callback, queue_size=1)
+        self.pose_sub = rospy.Subscriber(self.odom_topic, Odometry, self.odometry_callback, queue_size=10)
+        self.path_sub = rospy.Subscriber(self.path_topic, PathMsg, self.path_callback, queue_size=10)
 
     def setup_service(self):
         '''
@@ -152,7 +152,7 @@ class PlanningRecedingHorizon():
         # Retrive state needed for planning from the odometry message
         # [x, y, v, w, delta]
         state_cur = State2D(odom_msg = odom_msg)
-
+        
         # We first get the control command from the buffer
         # if self.planner_ready:
         #     self.publish_control(state_cur)
@@ -198,7 +198,7 @@ class PlanningRecedingHorizon():
         policy = self.policy_buffer.readFromRT()
         if policy is not None:    
             latency = t_cur-state.t
-            
+            rospy.loginfo(latency)
             x_i, u_i, K_i = policy.get_policy(t_cur)
             cur_state_vec = state.state_vector_latency(self.prev_delta, self.prev_u, latency+0.05)
             dx = (cur_state_vec - x_i)
@@ -259,18 +259,19 @@ class PlanningRecedingHorizon():
             dx = np.array([x[2]*np.cos(x[3]),
                         x[2]*np.sin(x[3]),
                         u[0],
-                        x[2]*np.tan(u[1])/0.257,
+                        x[2]*np.tan(u[1]*1.05)/0.257,
                         0
                         ])
             x_new = x + dx*dt
+            x_new[2] = max(0, x_new[2])
+            x_new[3] = np.mod(x_new[3] + np.pi, 2 * np.pi) - np.pi
             x_new[-1] = u[1]
             return x_new
         
         while not rospy.is_shutdown():
-            t_cur = rospy.get_rostime().to_sec()
+            t_cur = rospy.get_rostime().to_sec() + 0.08 # take accounthe latency in publish as well
             t_prev = prev_u[-1]
             dt = t_cur - t_prev
-            
             # publish the control command
             policy = self.policy_buffer.readFromRT()
             accel = 0
@@ -282,26 +283,27 @@ class PlanningRecedingHorizon():
                 if policy is not None:
                     # get policy
                     x_ref, u_ref, K = policy.get_policy(t_cur)
-                    dx = state_cur - x_ref
-                    dx[3] = np.mod(dx[3] + np.pi, 2 * np.pi) - np.pi
-                    u = u_ref + K @ dx
-                    accel = u[0]
-                    steer = prev_u[1] + u[1]*dt
-            
-            # generate control command
-            if self.simulation:
-                throttle = accel
-            else:
-                # If we are using robot,
-                # the throttle and steering angle needs to convert to PWM signal
-                throttle, steer = self.pwm_converter.convert(accel, steer, state_cur[2])
-            
-            # publish control command
-            servo_msg = ServoMsg()
-            servo_msg.header.stamp = rospy.Time.now()
-            servo_msg.throttle = throttle
-            servo_msg.steer = steer
-            self.control_pub.publish(servo_msg)
+                    if x_ref is not None:
+                        dx = state_cur - x_ref
+                        dx[3] = np.mod(dx[3] + np.pi, 2 * np.pi) - np.pi
+                        u = u_ref + K @ dx
+                        accel = u[0]
+                        steer = max(-0.35, min(0.35, prev_u[1] + u[1]*dt))
+                # generate control command
+                if self.simulation:
+                    throttle_pwm = accel
+                    steer_pwm = steer
+                else:
+                    # If we are using robot,
+                    # the throttle and steering angle needs to convert to PWM signal
+                    throttle_pwm, steer_pwm = self.pwm_converter.convert(accel, steer, state_cur[2])
+                
+                # publish control command
+                servo_msg = ServoMsg()
+                servo_msg.header.stamp = rospy.Time.now()
+                servo_msg.throttle = throttle_pwm
+                servo_msg.steer = steer_pwm
+                self.control_pub.publish(servo_msg)
             
             u_record = np.array([accel, steer, t_cur])
             u_queue.put(prev_u)
@@ -375,11 +377,11 @@ class PlanningRecedingHorizon():
                         rospy.logwarn_once("No path specified!")
                         continue
                     
-                    if self.planner_stopped:
-                        # Since the planner was previously stopped, we need to reset the time
-                        self.planner_stopped = False
-                        t_cur = rospy.get_time()
-                        rospy.loginfo("First plan gerenated!")
+                    # if self.planner_stopped:
+                    #     # Since the planner was previously stopped, we need to reset the time
+                    #     self.planner_stopped = False
+                    #     t_cur = rospy.get_time()
+                    #     rospy.loginfo("First plan gerenated!")
                     
                     if self.planner_ready:
                         # If stop planning is called, we will not write to the buffer
