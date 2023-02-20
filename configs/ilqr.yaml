@@ -9,7 +9,7 @@ platform: "cpu" # "cpu" or "gpu" or "tpu"
 ###########Optimization Parameters #################
 ####################################################        
 max_iter: 50 # maximum number of iterations
-# tolerance for the iLQR convergence
+# tolerance for the ILQR convergence
 # Make sure this is smaller than the minimum line search step size
 tol: 0.05
 
@@ -46,7 +46,7 @@ a_max: 5.0 # maximum acceleration
 a_min: -5.0 # minimum acceleration
 
 ####################################################
-########## Parameters for iLQR COST ################
+########## Parameters for ILQR COST ################
 ####################################################
 
 ########        State Cost          ############

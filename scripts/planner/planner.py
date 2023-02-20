@@ -8,8 +8,8 @@ import numpy as np
 import os
 
 from .utils import RealtimeBuffer, get_ros_param, State2D, Policy, GeneratePwm
-from .iLQR import RefPath
-from .iLQR import iLQRnp as iLQR
+from .ILQR import RefPath
+from .ILQR import ILQRnp as ILQR
 from racecar_msgs.msg import ServoMsg #, OdomMsg, PathMsg, ObstacleMsg, PathMsg
 # https://wiki.ros.org/rospy_tutorials/Tutorials/numpy
 # from rospy.numpy_msg import numpy_msg
@@ -82,9 +82,9 @@ class PlanningRecedingHorizon():
         
     def setup_planner(self):
         '''
-        This function setup the iLQR solver
+        This function setup the ILQR solver
         '''
-        # Read iLQR parameters
+        # Read ILQR parameters
         if self.ilqr_params_file == "":
             ilqr_params_abs_path = None
         elif os.path.isabs(self.ilqr_params_file):
@@ -92,8 +92,8 @@ class PlanningRecedingHorizon():
         else:
             ilqr_params_abs_path = os.path.join(self.package_path, self.ilqr_params_file)
         
-        # TODO: Initialize iLQR solver
-        self.planner = iLQR(ilqr_params_abs_path)
+        # TODO: Initialize ILQR solver
+        self.planner = ILQR(ilqr_params_abs_path)
 
         # create buffers to handle multi-threading
         self.plan_state_buffer = RealtimeBuffer()

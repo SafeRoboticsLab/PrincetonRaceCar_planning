@@ -10,7 +10,7 @@ dt:  0.1 # time step
 ###########Optimization Parameters #################
 ####################################################        
 max_iter:  50 # maximum number of iterations
-# tolerance for the iLQR convergence
+# tolerance for the ILQR convergence
 # Make sure this is smaller than the minimum line search step size
 tol:  1e-3
 
@@ -29,7 +29,7 @@ reg_init:  1.0 # initial regularization
 
 
 ####################################################
-########## Parameters for iLQR COST ################
+########## Parameters for ILQR COST ################
 ####################################################
 
 ########        State Cost          ############
