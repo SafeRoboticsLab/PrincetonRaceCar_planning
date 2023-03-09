@@ -26,18 +26,18 @@
         <arg name="lane_change_cost"        value="$(arg lane_change_cost)"/>
     </include>
 
-    <node pkg="racecar_traj_planner" type="traj_planning_node.py" name="traj_planning" output="$(arg output)">
+    <node pkg="racecar_planner" type="traj_planning_node.py" name="traj_planning" output="$(arg output)">
         <param name="odom_topic"           value="$(arg odom_topic)" />
         <param name="control_topic"        value="$(arg control_topic)" />
         <param name="obstacle_topic"       value="$(arg obstacle_topic)" />
         <param name="traj_topic"           value="$(arg traj_topic)" />
         <param name="path_topic"           value="$(arg path_topic)" />
-        <param name="package_path"         value="$(find racecar_traj_planner)" />
+        <param name="package_path"         value="$(find racecar_planner)" />
         <param name="simulation"           value="True" />
         <param name="receding_horizon"            value="$(arg receding_horizon)" />
         <param name="replan_dt"            value="$(arg replan_dt)" />
         <param name="ilqr_params_file"     value="$(arg ilqr_config)" />
-        <param name="PWM_model"            value="$(find racecar_traj_planner)/configs/mlp_model.sav" />
+        <param name="PWM_model"            value="$(find racecar_planner)/configs/mlp_model.sav" />
     </node>
 
 </launch>

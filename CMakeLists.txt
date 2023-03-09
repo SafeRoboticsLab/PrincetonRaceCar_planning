@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.0.2)
-project(racecar_traj_planner)
+project(racecar_planner)
 
 
 ## Find catkin macros and libraries
