@@ -16,7 +16,7 @@ class Config():
         ###########Optimization Parameters #################
         ####################################################        
         self.max_iter = 50 # maximum number of iterations
-        # tolerance for the iLQR convergence
+        # tolerance for the ILQR convergence
         # Make sure this is smaller than the minimum line search step size
         self.tol = 0.05
         
@@ -64,7 +64,7 @@ class Config():
         # reference velocity
         self.v_ref = 1.0 # reference velocity
         ####################################################
-        ########## Parameters for iLQR COST ################
+        ########## Parameters for ILQR COST ################
         ####################################################
         
         ########        State Cost          ############
@@ -131,4 +131,4 @@ class Config():
                 setattr(self, key, config_dict[key])
                 
     def __str__(self) -> str:
-        return 'iLQR config: ' + str(vars(self))
+        return 'ILQR config: ' + str(vars(self))

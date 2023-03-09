@@ -158,6 +158,9 @@ class RefPath:
             np.ndarray: the normalized progress along the centerline. This vector is of the
                 shape (1, N).
         """
+        if len(points.shape) == 1:
+            points = points[:, np.newaxis]
+            
         s, _ = self.center_line.projectPoint(points.T, eps=eps)
         
         if points.shape[1] == 1:

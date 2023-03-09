@@ -60,12 +60,12 @@ class Bicycle5D():
 		control input.
 
 		Args:
-			state (np.ndarray) [5].
-			control (np.ndarray) [2].
+			state: np.ndarray, (dim_x).
+			control: np.ndarray, (dim_u).
 
 		Returns:
-			state_next: np.ndarray: next state. [5]
-			control_clip: np.ndarray: clipped control. [2]
+			state_next: np.ndarray, (dim_x) next state.
+			control_clip: np.ndarray, (dim_u) clipped control.
 		"""
 		state_nxt, ctrl_clip = self.integrate_forward_jax(state, control)
 		return np.asarray(state_nxt), np.asarray(ctrl_clip)
@@ -74,16 +74,18 @@ class Bicycle5D():
 		self, trajectory: DeviceArray, controls: DeviceArray
 	) -> Tuple[np.ndarray, np.ndarray]:
 		"""
+		A, B = self.dyn.get_jacobian_np(trajectory, controls)
+
 		Returns the linearized 'A' and 'B' matrix of the ego vehicle around
 		nominal trajectory and controls.
 
 		Args:
-			trajectory (DeviceArray): trajectory along the nominal trajectory.
-			controls (DeviceArray): controls along the trajectory.
+			trajectory: np.ndarray, (dim_x, T) trajectory along the nominal trajectory.
+			controls: np.ndarray, (dim_u, T) controls along the trajectory.
 
 		Returns:
-			np.ndarray: the Jacobian of the dynamics w.r.t. the state.
-			np.ndarray: the Jacobian of the dynamics w.r.t. the control.
+			A: np.ndarray, (dim_x, T) the Jacobian of the dynamics w.r.t. the state.
+			B: np.ndarray, (dim_u, T) the Jacobian of the dynamics w.r.t. the control.
 		"""
 		A_jax, B_jax = self.get_jacobian_jax(trajectory, controls)
 		return np.asarray(A_jax), np.asarray(B_jax)

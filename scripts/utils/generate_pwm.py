@@ -1,6 +1,5 @@
 import rospy
 from .ros_utility import get_ros_param
-from .state_2d import State2D
 import numpy as np
 import pickle
 
@@ -46,9 +45,9 @@ class GeneratePwm():
             v_bounded = v
         
         # negative pwm means turn left (positive steering angle)
-        steer_pwm = np.clip(steer/0.35, -1, 1)
+        steer_pwm = -np.clip(steer/0.37, -1, 1)
         accel_bounded = np.sign(accel)*min(abs(accel), 2+v)
-        # print(accel, v, accel_bounded, v_bounded, w, np.abs(steer_pwm))
+
         # Generate Input vector
         input = np.array([[accel_bounded, v_bounded, np.abs(steer_pwm)]])
         
@@ -62,8 +61,11 @@ class GeneratePwm():
         
         # clip the throttle to the maximum and minimum throttle
         throttle_pwm = np.clip(d, self.min_throttle, self.max_throttle)
+        
+        # Composite the throttle for low speed
         if v<0.2:
             throttle_pwm += np.abs(steer_pwm)*0.04
+            
         return throttle_pwm, steer_pwm
         
         

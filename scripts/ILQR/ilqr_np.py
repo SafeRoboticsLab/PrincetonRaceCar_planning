@@ -1,43 +1,52 @@
-from typing import Tuple, Optional, Dict
+from typing import Tuple, Optional, Dict, Union
+from jaxlib.xla_extension import DeviceArray
 import time
 import os
 import numpy as np
-from functools import partial
 import jax
-from jax import numpy as jnp
-from jaxlib.xla_extension import DeviceArray
-
 from .dynamics import Bicycle5D
 from .cost import Cost, CollisionChecker, Obstacle
 from .ref_path import RefPath
 from .config import Config
-import time 
+import time
 
 status_lookup = ["Iteration Limit Exceed",
                 "Converged",
                 "Failed Line Search"]
-class iLQR():
+
+class ILQR_np():
 	def __init__(self, config_file = None) -> None:
 
 		self.config = Config()  # Load default config.
 		if config_file is not None:
 			self.config.load_config(config_file)  # Load config from file.
 		
-		print("iLQR setting:", self.config)
+		self.load_parameters()
+		print('ILQR setting:', self.config)
 
 		# Set up Jax parameters
 		jax.config.update('jax_platform_name', self.config.platform)
-		print("Jax using Platform: ", jax.lib.xla_bridge.get_backend().platform)
+		print('Jax using Platform: ', jax.lib.xla_bridge.get_backend().platform)
+
 		# If you want to use GPU, lower the memory fraction from 90% to avoid OOM.
-		os.environ["XLA_PYTHON_CLIENT_MEM_FRACTION"] = "20"
+		os.environ['XLA_PYTHON_CLIENT_MEM_FRACTION'] = '20'
 
 		self.dyn = Bicycle5D(self.config)
 		self.cost = Cost(self.config)
+		self.ref_path = None
+
+		# collision checker
+		# Note: This will not be used until lab2.
 		self.collision_checker = CollisionChecker(self.config)
 		self.obstacle_list = []
-		self.ref_path = None
-		
-		# iLQR parameters
+
+		self.warm_up()
+
+	def load_parameters(self):
+		'''
+		This function defines ILQR parameters from <self.config>.
+		'''
+		# ILQR parameters
 		self.dim_x = self.config.num_dim_x
 		self.dim_u = self.config.num_dim_u
 		self.T = int(self.config.T)
@@ -46,12 +55,12 @@ class iLQR():
 		self.tol = float(self.config.tol)  # ILQR update tolerance.
 
 		# line search parameters.
-		self.alphas = self.config.line_search_base**(np.arange(self.config.line_search_a, 
+		self.alphas = self.config.line_search_base**(np.arange(self.config.line_search_a,
                                                 self.config.line_search_b,
                                                 self.config.line_search_c)
                                             )
-		
-		print("Line Search Alphas: ", self.alphas)
+
+		print('Line Search Alphas: ', self.alphas)
 
 		# regularization parameters
 		self.reg_min = float(self.config.reg_min)
@@ -60,20 +69,65 @@ class iLQR():
 		self.reg_scale_up = float(self.config.reg_scale_up)
 		self.reg_scale_down = float(self.config.reg_scale_down)
 		self.max_attempt = self.config.max_attempt
-		self.warm_up()
+		
+	def warm_up(self):
+		'''
+		Warm up the jitted functions.
+		'''
+		# Build a fake path as a 1 meter radius circle.
+		theta = np.linspace(0, 2 * np.pi, 100)
+		centerline = np.zeros([2, 100])
+		centerline[0,:] = 1 * np.cos(theta)
+		centerline[1,:] = 1 * np.sin(theta)
+
+		self.ref_path = RefPath(centerline, 0.5, 0.5, 1, True)
+
+		# add obstacle
+		obs = np.array([[0, 0, 0.5, 0.5], [1, 1.5, 1, 1.5]]).T
+		obs_list = [[obs for _ in range(self.T)]]
+		self.update_obstacles(obs_list)
+
+		x_init = np.array([0.0, -1.0, 1, 0, 0])
+		print('Start warm up ILQR...')
+		# import matplotlib.pyplot as plt
+		self.plan(x_init, verbose=False)
+		print('ILQR warm up finished.')
+		# plt.plot(plan['trajectory'][0,:], plan['trajectory'][1,:])
+		# print(f'Warm up takes {plan['t_process']} seconds.')
+		self.ref_path = None
+		self.obstacle_list = []
 
 	def update_ref_path(self, ref_path: RefPath):
+		'''
+		Update the reference path.
+		Args:
+			ref_path: RefPath: reference path.
+		'''
 		self.ref_path = ref_path
 
 	def update_obstacles(self, vertices_list: list):
+		'''
+		Update the obstacle list for a list of vertices.
+		Args:
+			vertices_list: list of np.ndarray: list of vertices for each obstacle.
+		'''
+		# Note: This will not be used until lab2.
 		self.obstacle_list = []
 		for vertices in vertices_list:
 			self.obstacle_list.append(Obstacle(vertices))
 
-	def get_references(self, trajectory):
-		states_np = np.asarray(trajectory)
-		path_refs = self.ref_path.get_reference(states_np[:2, :])
-		obs_refs = self.collision_checker.check_collisions(states_np, self.obstacle_list)
+	def get_references(self, trajectory: Union[np.ndarray, DeviceArray]):
+		'''
+		Given the trajectory, get the path reference and obstacle information.
+		Args:
+			trajectory: [num_dim_x, T] trajectory.
+		Returns:
+			path_refs: [num_dim_x, T] np.ndarray: references.
+			obs_refs: [num_dim_x, T] np.ndarray: obstacle references.
+		'''
+		trajectory = np.asarray(trajectory)
+		path_refs = self.ref_path.get_reference(trajectory[:2, :])
+		obs_refs = self.collision_checker.check_collisions(trajectory, self.obstacle_list)
 		return path_refs, obs_refs
 
 	def plan(self, init_state: np.ndarray, 
@@ -85,7 +139,7 @@ class iLQR():
 		
 		t_start = time.time()
 		'''
-		Main iLQR loop.
+		Main ILQR loop.
 		Args:
 			init_state: [num_dim_x] np.ndarray: initial state.
 			control: [num_dim_u, N] np.ndarray: initial control.
@@ -97,9 +151,9 @@ class iLQR():
 			assert controls.shape[1] == self.T
 		
 		# Rolls out the nominal trajectory and gets the initial cost.
-		#* This is differnet from the naive iLQR as it relies on the information
+		#* This is differnet from the naive ILQR as it relies on the information
 		#* from the pyspline.
-		trajectory, controls = self.dyn.rollout_nominal_jax(init_state, controls)
+		trajectory, controls = self.dyn.rollout_nominal_np(init_state, controls)
 
 		path_refs, obs_refs = self.get_references(trajectory)
 
@@ -126,7 +180,7 @@ class iLQR():
 			updated = False
 			# Get the derivatives of the cost 
 			t0 = time.time()
-			q, r, Q, R, H = self.cost.get_derivatives_jax(trajectory, controls, path_refs, obs_refs)
+			q, r, Q, R, H = self.cost.get_derivatives_np(trajectory, controls, path_refs, obs_refs)
 			t_cost_der += (time.time()-t0)
 			num_cost_der += 1
 			
@@ -134,17 +188,14 @@ class iLQR():
 			# But doing slice with Jax will leads to performance issue.
 			# So we calculate the derivatives from 0 to N-1 and Backward pass will ignore the last one.
 			t0 = time.time()
-			A, B = self.dyn.get_jacobian_jax(trajectory, controls)
-			fxx, fuu, fux = self.dyn.get_hessian_jax(trajectory, controls)
+			A, B = self.dyn.get_jacobian_np(trajectory, controls)
 			t_dyn_der += (time.time()-t0)
 			num_dyn_der += 1
 			
 			#Backward pass with new regularization.
 			t0 = time.time()
 			K_closed_loop, k_open_loop, reg = self.backward_pass(
-				q=q, r=r, Q=Q, R=R, H=H, A=A, B=B, 
-				fxx = fxx, fuu = fuu, fux = fux,
-				reg = reg
+				q=q, r=r, Q=Q, R=R, H=H, A=A, B=B, reg = reg
 			)
 			t_back += (time.time()-t0)
 			num_back += 1
@@ -216,136 +267,102 @@ class iLQR():
 				k_open_loop=np.asarray(k_open_loop), t_process=t_process,
 				status=status, J=J, q=q, r=r,
 				Q=Q, R=R, H=H,
-				A=A, B=B, N = self.T, dt = self.dt, 
+				A=A, B=B, T = self.T, dt = self.dt, 
 				analysis = analysis_string
 		)
 		return solver_info
 
 	def forward_pass(
-			self, nominal_states: DeviceArray, nominal_controls: DeviceArray,
-			K_closed_loop: DeviceArray, k_open_loop: DeviceArray, alpha: float
-	) -> Tuple[DeviceArray, DeviceArray, float, DeviceArray, DeviceArray,
-			DeviceArray]:
+			self, nominal_states: np.ndarray, nominal_controls: np.ndarray,
+			K_closed_loop: np.ndarray, k_open_loop: np.ndarray, alpha: float
+	) -> Tuple[np.ndarray, np.ndarray, float, np.ndarray, np.ndarray,
+			np.ndarray]:
 		X, U = self.rollout(
 				nominal_states, nominal_controls, K_closed_loop, k_open_loop, alpha
 		)
-		#* This is differnet from the naive iLQR as it relies on the information
-		#* from the pyspline. Thus, it cannot be used with jit.
 		path_refs, obs_refs = self.get_references(X)
 		
 		J = self.cost.get_traj_cost(X, U, path_refs, obs_refs)
 		
 		return X, U, J, path_refs, obs_refs
 
-	@partial(jax.jit, static_argnums=(0,))
 	def backward_pass(
-			self, q: DeviceArray, r: DeviceArray, Q: DeviceArray,
-			R: DeviceArray, H: DeviceArray, A: DeviceArray, B: DeviceArray,
-			fxx: DeviceArray, fuu: DeviceArray, fux: DeviceArray, 
-			reg: float, ddp: bool = True
-	) -> Tuple[DeviceArray, DeviceArray]:
+			self, q: np.ndarray, r: np.ndarray, Q: np.ndarray,
+			R: np.ndarray, H: np.ndarray, A: np.ndarray, B: np.ndarray,
+			reg: float
+	) -> Tuple[np.ndarray, np.ndarray]:
 		"""
-		Jitted backward pass looped computation.
+		backward pass looped computation.
 
 		Args:
-				q (DeviceArray): (dim_x, N)
-				r (DeviceArray): (dim_u, N)
-				Q (DeviceArray): (dim_x, dim_x, N)
-				R (DeviceArray): (dim_u, dim_u, N)
-				H (DeviceArray): (dim_u, dim_x, N)
-				A (DeviceArray): (dim_x, dim_x, N-1)
-				B (DeviceArray): (dim_x, dim_u, N-1)
+				q (np.ndarray): (dim_x, N)
+				r (np.ndarray): (dim_u, N)
+				Q (np.ndarray): (dim_x, dim_x, N)
+				R (np.ndarray): (dim_u, dim_u, N)
+				H (np.ndarray): (dim_u, dim_x, N)
+				A (np.ndarray): (dim_x, dim_x, N-1)
+				B (np.ndarray): (dim_x, dim_u, N-1)
 
 		Returns:
-				Ks (DeviceArray): gain matrices (dim_u, dim_x, N - 1)
-				ks (DeviceArray): gain vectors (dim_u, N - 1)
+				Ks (np.ndarray): gain matrices (dim_u, dim_x, N - 1)
+				ks (np.ndarray): gain vectors (dim_u, N - 1)
 		"""
-		def init():
-			Ks = jnp.zeros((self.dim_u, self.dim_x, self.T - 1))
-			ks = jnp.zeros((self.dim_u, self.T - 1))
-			V_x = q[:, -1]
-			V_xx = Q[:, :, -1]
-			return V_x, V_xx, ks, Ks
+		Ks = np.zeros((self.dim_u, self.dim_x, self.T - 1))
+		ks = np.zeros((self.dim_u, self.T - 1))
+		V_x = q[:, -1]
+		V_xx = Q[:, :, -1]
+		t = self.T-2
 
-		@jax.jit
-		def backward_pass_looper(val):
-			V_x, V_xx, ks, Ks, t, reg = val
+		while t>=0:
 			Q_x = q[:, t] + A[:, :, t].T @ V_x
 			Q_u = r[:, t] + B[:, :, t].T @ V_x
-			Q_xx = Q[:, :, t] + A[:, :, t].T @ V_xx @ A[:, :, t] + ddp*jnp.tensordot(V_x, fxx[:, :, :, t], axes=1)
-			Q_ux = H[:, :, t] + B[:, :, t].T @ V_xx @ A[:, :, t] + ddp*jnp.tensordot(V_x, fux[:, :, :, t], axes=1)
-			Q_uu = R[:, :, t] + B[:, :, t].T @ V_xx @ B[:, :, t] + ddp*jnp.tensordot(V_x, fuu[:, :, :, t], axes=1)
+			Q_xx = Q[:, :, t] + A[:, :, t].T @ V_xx @ A[:, :, t]
+			Q_ux = H[:, :, t] + B[:, :, t].T @ V_xx @ A[:, :, t]
+			Q_uu = R[:, :, t] + B[:, :, t].T @ V_xx @ B[:, :, t]
 
 			# According to the paper, the regularization is added to Vxx for robustness.
 			# http://roboticexplorationlab.org/papers/iLQR_Tutorial.pdf
-			reg_mat = reg* jnp.eye(self.dim_x)
+			reg_mat = reg* np.eye(self.dim_x)
 			V_xx_reg = V_xx + reg_mat
-			Q_ux_reg = H[:, :, t] + B[:, :, t].T @ V_xx_reg @ A[:, :, t] + ddp*jnp.tensordot(V_x, fux[:, :, :, t], axes=1)
-			Q_uu_reg = R[:, :, t] + B[:, :, t].T @ V_xx_reg @ B[:, :, t] + ddp*jnp.tensordot(V_x, fuu[:, :, :, t], axes=1)
+			Q_ux_reg = H[:, :, t] + B[:, :, t].T @ V_xx_reg @ A[:, :, t]
+			Q_uu_reg = R[:, :, t] + B[:, :, t].T @ V_xx_reg @ B[:, :, t]
 
-			@jax.jit
-			def isposdef(A, reg):
-				# If the regularization is too large, but the matrix is still not positive definite,
-				# we will let the backward pass continue to avoid infinite loop.
-				return (jnp.all(jnp.linalg.eigvalsh(A) > 0) | (reg >= self.reg_max))
+			if (not (np.all(np.linalg.eigvalsh(Q_uu_reg) > 0)) and (reg < self.reg_max)):
+				t = self.T-2
+				V_x = q[:, -1]
+				V_xx = Q[:, :, -1]
+				reg *= self.reg_scale_up
+				continue
 
-			@jax.jit 
-			def false_func(val):
-				V_x, V_xx, ks, Ks = init()
-				updated_reg = self.reg_scale_up * reg
-				updated_reg = jax.lax.cond(updated_reg<=self.reg_max, 
-									lambda x: x, lambda x: self.reg_max, updated_reg)
-				return V_x, V_xx, ks, Ks, self.T - 2, updated_reg
+			Q_uu_reg_inv = np.linalg.inv(Q_uu_reg)
 
-			@jax.jit
-			def true_func(val):
-				Ks, ks = val
-				Q_uu_reg_inv = jnp.linalg.inv(Q_uu_reg)
+			Ks[:, :, t] = (-Q_uu_reg_inv @ Q_ux_reg)
+			ks[:, t] = (-Q_uu_reg_inv @ Q_u)
 
-				Ks = Ks.at[:, :, t].set(-Q_uu_reg_inv @ Q_ux_reg)
-				ks = ks.at[:, t].set(-Q_uu_reg_inv @ Q_u)
+			V_x = Q_x + Ks[:,:,t].T @ Q_u + Q_ux.T @ ks[:, t] + Ks[:,:,t].T @ Q_uu @ ks[:, t] 
+			V_xx = Q_xx +  Ks[:, :, t].T @ Q_ux+ Q_ux.T @ Ks[:, :, t] + Ks[:, :, t].T @ Q_uu @ Ks[:, :, t]
+			t -= 1
 
-				V_x = Q_x + Ks[:, :, t].T @ Q_u + Q_ux.T @ ks[:, t] + Ks[:, :, t].T @ Q_uu @ ks[:, t] 
-				V_xx = Q_xx +  Ks[:, :, t].T @ Q_ux+ Q_ux.T @ Ks[:, :, t] + Ks[:, :, t].T @ Q_uu @ Ks[:, :, t]
-				return V_x, V_xx, ks, Ks, t-1, reg
-			return jax.lax.cond(isposdef(Q_uu_reg, reg), true_func, false_func, (Ks, ks))
-
-		@jax.jit
-		def cond_fun(val):
-			_, _, _, _, t, _ = val
-			return t>=0
-
-		# Initializes.
-		V_x, V_xx, ks, Ks = init()
-		t = self.T - 2
-		
-		V_x, V_xx, ks, Ks, t, reg = jax.lax.while_loop(cond_fun, backward_pass_looper,(V_x, V_xx, ks, Ks, t, reg))
 		return Ks, ks, reg
 
-	@partial(jax.jit, static_argnums=(0,))
 	def rollout(
-			self, nominal_states: DeviceArray, nominal_controls: DeviceArray,
-			K_closed_loop: DeviceArray, k_open_loop: DeviceArray, alpha: float
-	) -> Tuple[DeviceArray, DeviceArray]:
+			self, nominal_states: np.ndarray, nominal_controls: np.ndarray,
+			K_closed_loop: np.ndarray, k_open_loop: np.ndarray, alpha: float
+	) -> Tuple[np.ndarray, np.ndarray]:
+		X = np.zeros((self.dim_x, self.T))
+		U = np.zeros((self.dim_u, self.T))  #  Assumes the last ctrl are zeros.
 
-		@jax.jit
-		def _rollout_step(t, args):
-			X, U = args
+		X[:,0] = nominal_states[:,0]
+
+		for t in range(self.T - 1):
 			dx = X[:, t] - nominal_states[:, t]
 			# VERY IMPORTANT: THIS IS A HACK TO MAKE THE ANGLE DIFFERENCE BETWEEN -pi and pi
-			dx = dx.at[3].set(jnp.mod(dx[3] + jnp.pi, 2 * jnp.pi) - jnp.pi)
-			u_fb = jnp.einsum("ik,k->i", K_closed_loop[:, :, t], dx)
+			dx[3] = np.mod(dx[3] + np.pi, 2 * np.pi) - np.pi
+			u_fb = np.einsum("ik,k->i", K_closed_loop[:, :, t], dx)
 			u = nominal_controls[:, t] + alpha * k_open_loop[:, t] + u_fb
-			x_nxt, u_clip = self.dyn.integrate_forward_jax(X[:, t], u)
-			X = X.at[:, t + 1].set(x_nxt)
-			U = U.at[:, t].set(u_clip)
-			return X, U
-
-		X = jnp.zeros((self.dim_x, self.T))
-		U = jnp.zeros((self.dim_u, self.T))  #  Assumes the last ctrl are zeros.
-		X = X.at[:, 0].set(nominal_states[:, 0])
-
-		X, U = jax.lax.fori_loop(0, self.T - 1, _rollout_step, (X, U))
+			x_nxt, u_clip = self.dyn.integrate_forward_np(X[:, t], u)
+			X[:, t+1] = x_nxt
+			U[:, t] =u_clip
 
 		return X, U
 
@@ -353,7 +370,7 @@ class iLQR():
 		"""Warm up the jitted functions."""
 		
 		# Build a fake path as a 1 meter radius circle.
-		theta = np.linspace(0, 2 * jnp.pi, 100)
+		theta = np.linspace(0, 2 * np.pi, 100)
 		centerline = np.zeros([2, 100])
 		centerline[0,:] = 1 * np.cos(theta)
 		centerline[1,:] = 1 * np.sin(theta)
@@ -366,10 +383,12 @@ class iLQR():
 		self.update_obstacles(obs_list)
 
 		x_init = np.array([0.0, -1.0, 1, 0, 0])
-		print("Start warm up iLQR...")
-		self.plan(x_init, verbose=False)
-		print("iLQR warm up finished.")
-		
+		print("Start warm up ILQR...")
+		# import matplotlib.pyplot as plt
+		plan = self.plan(x_init, verbose=False)
+		print("ILQR warm up finished.")
+		# plt.plot(plan['trajectory'][0,:], plan['trajectory'][1,:])
+		# print(f"Warm up takes {plan['t_process']} seconds.")
 		self.ref_path = None
 		self.obstacle_list = []
 	
