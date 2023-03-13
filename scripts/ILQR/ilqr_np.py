@@ -200,6 +200,14 @@ class ILQR_np():
 			t_back += (time.time()-t0)
 			num_back += 1
 			
+			if np.any(np.isnan(K_closed_loop)):
+				print("Detect NAN in K_closed_loop")
+				break
+
+			if np.any(np.isnan(k_open_loop)):
+				print("Detect NAN in k_open_loop")
+				break
+
 			# Line search through alphas.
 			for alpha in self.alphas:
 				t0 = time.time()
@@ -211,6 +219,11 @@ class ILQR_np():
 				t_forward += (time.time()-t0)
 				num_forward += 1
 				
+				# check NAN
+				if np.any(np.isnan(X_new)):
+					print("Detect NAN")
+					continue
+
 				if J_new <= J:  # Improved!
 					# Small improvement.
 					# if np.abs(J-J_new)/max(1, np.abs(J)) < self.tol:

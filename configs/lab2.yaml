@@ -3,7 +3,7 @@
 ####################################################
 num_dim_x: 5
 num_dim_u: 2
-T: 15 # horizon length
+T: 20 # horizon length
 dt: 0.1
 # time step
 platform: "cpu" # "cpu" or "gpu" or "tpu"
@@ -85,7 +85,7 @@ vel_limit_b: 1.0 # parameter for ExpLinear Cost
 
 # Heading Cost
 heading_cost_type: 'quadratic' # 'quadratic' or 'huber'
-heading_weight: 3  # weight for the heading cost
+heading_weight: 2  # weight for the heading cost
 heading_huber_delta: 1 # huber loss delta for heading cost
 
 # Lateral Acceleration Cost
@@ -101,18 +101,18 @@ progress_weight: 0  # weight for the progress cost
 # Lane Boundary Cost
 dim_right_boundary: 5 # dimension of lane boundary in the reference
 dim_left_boundary: 6 # dimension of lane boundary in the reference
-lane_boundary_a: 80.0 # parameter for lane boundary cost
-lane_boundary_b: 5.0 # parameter for ExpLinear Cost
+lane_boundary_a: 50.0 # parameter for lane boundary cost
+lane_boundary_b: 2.0 # parameter for ExpLinear Cost
 
 ########        Control Cost          ############
 
 ctrl_cost_type: 'quadratic' # 'quadratic' or 'huber'
 # those value should not be too small
-ctrl_cost_accel_weight: 1
+ctrl_cost_accel_weight: 2
 ctrl_cost_steer_weight: 0.5
 ctrl_cost_accel_huber_delta: 1.0 # huber loss delta
 ctrl_cost_steer_huber_delta: 1.0 # huber loss delta
 
 ########        Obstacle Cost          ############
 obs_a: 20.0 # parameter for obstacle cost
-obs_b: 10.0 # parameter for ExpLinear Cost
+obs_b: 8.0 # parameter for ExpLinear Cost
