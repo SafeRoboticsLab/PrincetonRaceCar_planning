@@ -6,12 +6,13 @@ import numpy as np
 import os
 import time
 
-from utils import RealtimeBuffer, get_ros_param, Policy, GeneratePwm
+from utils import RealtimeBuffer, get_ros_param, Policy, GeneratePwm, get_obstacle_vertices
 from ILQR import RefPath
 from ILQR import ILQR_np as ILQR
 
-from racecar_msgs.msg import ServoMsg 
+from racecar_msgs.msg import ServoMsg, OdometryArray
 from racecar_planner.cfg import plannerConfig
+from visualization_msgs.msg import MarkerArray
 
 from dynamic_reconfigure.server import Server
 from tf.transformations import euler_from_quaternion
@@ -65,11 +66,11 @@ class TrajectoryPlanner():
         # Read ROS topic names to subscribe 
         self.odom_topic = get_ros_param('~odom_topic', '/slam_pose')
         self.path_topic = get_ros_param('~path_topic', '/Routing/Path')
-        self.obstacle_topic = get_ros_param('~obstacle_topic', '/prediction/obstacles')
         
         # Read ROS topic names to publish
         self.control_topic = get_ros_param('~control_topic', '/control/servo_control')
         self.traj_topic = get_ros_param('~traj_topic', '/Planning/Trajectory')
+        self.static_obs_topic = rospy.get_param('~static_obs_topic', '/Obstacles/Static')
         
         # Read the simulation flag, 
         # if the flag is true, we are in simulation 
@@ -102,6 +103,7 @@ class TrajectoryPlanner():
         self.policy_buffer = RealtimeBuffer()
         self.path_buffer = RealtimeBuffer()
         self.obstacle_buffer = RealtimeBuffer()
+        self.static_obstacle_dict = {}
         self.planner_ready = True
 
     def setup_publisher(self):
@@ -120,7 +122,17 @@ class TrajectoryPlanner():
         '''
         self.pose_sub = rospy.Subscriber(self.odom_topic, Odometry, self.odometry_callback, queue_size=10)
         self.path_sub = rospy.Subscriber(self.path_topic, PathMsg, self.path_callback, queue_size=10)
+        self.static_obs_sub = rospy.Subscriber(self.static_obs_topic, MarkerArray, self.static_obstacle_callback, queue_size=10)
 
+    def static_obstacle_callback(self, msg):
+        '''
+        Static obstacle callback function
+        '''
+        for obs in msg.markers:
+            id = obs.id
+            vertices = get_obstacle_vertices(obs)
+            self.static_obstacle_dict[id] = vertices
+        
     def setup_service(self):
         '''
         Set up ros service
@@ -249,15 +261,18 @@ class TrajectoryPlanner():
             state_cur = None
             policy = self.policy_buffer.readFromRT()
             
-            # take the latency of publish into the account
-            self.update_lock.acquire()
-            t_act = rospy.get_rostime().to_sec() + self.latency 
-            self.update_lock.release()
-            
+            t_act = rospy.get_rostime().to_sec()
+
             # check if there is new state available
             if self.control_state_buffer.new_data_available:
                 odom_msg = self.control_state_buffer.readFromRT()
-                t_slam = odom_msg.header.stamp.to_sec()
+                
+                if self.simulation:
+                    t_slam = odom_msg.header.stamp.to_sec()
+                else:
+                    self.update_lock.acquire()
+                    t_act = rospy.get_rostime().to_sec() - self.latency 
+                    self.update_lock.release()
                 
                 u = np.zeros(3)
                 u[-1] = t_slam
@@ -277,7 +292,7 @@ class TrajectoryPlanner():
                             psi,
                             u[1]
                         ])
-               
+
                 # predict the current state use past control command
                 for i in range(u_queue.qsize()):
                     u_next = u_queue.queue[i]
@@ -370,6 +385,12 @@ class TrajectoryPlanner():
                         new_path = self.path_buffer.readFromRT()
                         self.planner.update_ref_path(new_path)
                     
+                    # Update the obstacles
+                    vertices_list = []
+                    for vertices in self.static_obstacle_dict.values():
+                        vertices_list.append(vertices)
+                    self.planner.update_obstacles(vertices_list)
+                    
                     # Replan use ilqr
                     new_plan = self.planner.plan(state_cur[:-1], init_controls, verbose=False)
                     
@@ -392,7 +413,7 @@ class TrajectoryPlanner():
                         # publish the new policy for RVIZ visualization
                         self.trajectory_pub.publish(new_policy.to_msg())        
                         t_last_replan = t_cur
-                        
+
     def policy_planning_thread(self):
         '''
         This function is the main thread for open loop planning

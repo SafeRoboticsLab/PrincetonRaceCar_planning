@@ -121,7 +121,7 @@ class RefPath:
             
     def get_reference(self, points: np.ndarray,
             normalize_progress: Optional[bool] = False, 
-            eps: Optional[float] = 1e-5) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+            eps: Optional[float] = 1e-3) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
         
         closest_pt, slope, s = self.get_closest_pts(points, eps=eps)
         
@@ -141,7 +141,7 @@ class RefPath:
         s = s[np.newaxis, :]
         return np.concatenate([closest_pt, slope, v_ref, s, width_right, width_left], axis=0)
 
-    def get_closest_pts(self, points: np.ndarray, eps: Optional[float] = 1e-5) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+    def get_closest_pts(self, points: np.ndarray, eps: Optional[float] = 1e-3) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
         """
         Gets the closest points on the centerline, the slope of their tangent
         lines, and the progress given the points in the global frame.
@@ -153,7 +153,7 @@ class RefPath:
         Returns:
             np.ndarray: the position of the closest points on the centerline. This
                 array is of the shape (2, N).
-            np.ndarray: the slope of of trangent line on those points. This vector
+            np.ndarray: the slope of of tangent line on those points. This vector
                 is of the shape (1, N).
             np.ndarray: the normalized progress along the centerline. This vector is of the
                 shape (1, N).
