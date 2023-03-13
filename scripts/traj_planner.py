@@ -392,7 +392,7 @@ class TrajectoryPlanner():
                     self.planner.update_obstacles(vertices_list)
                     
                     # Replan use ilqr
-                    new_plan = self.planner.plan(state_cur[:-1], init_controls, verbose=False)
+                    new_plan = self.planner.plan(state_cur[:-1], init_controls, verbose=True)
                     
                     plan_status = new_plan['status']
                     if plan_status == -1:
