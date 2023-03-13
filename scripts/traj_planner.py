@@ -413,6 +413,7 @@ class TrajectoryPlanner():
                         # publish the new policy for RVIZ visualization
                         self.trajectory_pub.publish(new_policy.to_msg())        
                         t_last_replan = t_cur
+                        
 
     def policy_planning_thread(self):
         '''

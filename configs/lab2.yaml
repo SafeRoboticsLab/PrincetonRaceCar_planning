@@ -70,12 +70,12 @@ dim_closest_pt_x: 0 # dimension of closest point x in the reference
 dim_closest_pt_y: 1 # dimension of closest point y in the reference
 dim_path_slope: 2 # dimension of path slope in the reference
 path_cost_type: 'quadratic' # 'quadratic' or 'huber'
-path_weight: 4.0 # weight for the path deviation cost
+path_weight: 2.0 # weight for the path deviation cost
 path_huber_delta: 2 # huber loss delta for path deviation cost
 
 # Velocity Cost
 vel_cost_type: 'quadratic' # 'quadratic' or 'huber'
-vel_weight: 4.0 # weight for the velocity cost
+vel_weight: 3.0 # weight for the velocity cost
 vel_huber_delta: 1 # huber loss delta for velocity cost
 
 # Speed Limit Cost
@@ -96,13 +96,13 @@ lat_accel_b: 2.0 # parameter for ExpLinear Cost
 
 # Progress Cost
 dim_progress: 4 # dimension of progress in the reference
-progress_weight: 0  # weight for the progress cost
+progress_weight: 0.1  # weight for the progress cost
 
 # Lane Boundary Cost
 dim_right_boundary: 5 # dimension of lane boundary in the reference
 dim_left_boundary: 6 # dimension of lane boundary in the reference
 lane_boundary_a: 50.0 # parameter for lane boundary cost
-lane_boundary_b: 2.0 # parameter for ExpLinear Cost
+lane_boundary_b: 1.0 # parameter for ExpLinear Cost
 
 ########        Control Cost          ############
 
@@ -114,5 +114,5 @@ ctrl_cost_accel_huber_delta: 1.0 # huber loss delta
 ctrl_cost_steer_huber_delta: 1.0 # huber loss delta
 
 ########        Obstacle Cost          ############
-obs_a: 20.0 # parameter for obstacle cost
-obs_b: 8.0 # parameter for ExpLinear Cost
+obs_a: 15.0 # parameter for obstacle cost
+obs_b: 5.0 # parameter for ExpLinear Cost
