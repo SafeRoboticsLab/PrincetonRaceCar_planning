@@ -146,6 +146,7 @@ class ILQR_np():
 		'''
 		# np.set_printoptions(suppress=True, precision=5)
 		if controls is None:
+			print('No initial control is provided. Using zero control.')
 			controls =np.zeros((self.dim_u, self.T))
 		else:
 			assert controls.shape[1] == self.T
@@ -194,6 +195,10 @@ class ILQR_np():
 			
 			if np.any(np.isnan(Q)):
 				print("Detect NAN in Q")
+				print("traj:", trajectory)
+				print("control", controls)
+				print("path", path_refs)
+				print("obs", obs_refs)
 				break
 			#Backward pass with new regularization.
 			t0 = time.time()

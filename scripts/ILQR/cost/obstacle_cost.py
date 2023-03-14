@@ -53,7 +53,7 @@ class SingleObstacleCost(BaseCost):
         dis = jnp.linalg.norm(diff)
         y = jnp.where(dis >= 1e-4, dis, 1e-4)
 
-        y= -1*jnp.sign(dis_ref)*y+0.05
+        y= -1*jnp.sign(dis_ref)*y 
 
         # Do not calrlate gradient w.r.t velocity
         v_no_grad = jax.lax.stop_gradient(state[2])
