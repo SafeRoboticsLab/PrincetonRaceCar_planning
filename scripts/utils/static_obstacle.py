@@ -5,6 +5,9 @@ from scipy.spatial.transform import Rotation as R
 def get_obstacle_vertices(obs: Marker):
     '''
     Convert a cubic object from a Marker message to its vertices in the world frame
+    Return:
+        id: id of the obstacle
+        vertices_global: 8x3 numpy array of vertices in the world frame
     '''
     x_size = obs.scale.x
     y_size = obs.scale.y
@@ -29,7 +32,7 @@ def get_obstacle_vertices(obs: Marker):
     
     vertices_global = np.dot(T, vertices_local)
     
-    return vertices_global[:3, :].T
+    return obs.id, vertices_global[:3, :].T
 
     
     

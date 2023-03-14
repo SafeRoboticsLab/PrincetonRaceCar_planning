@@ -192,6 +192,9 @@ class ILQR_np():
 			t_dyn_der += (time.time()-t0)
 			num_dyn_der += 1
 			
+			if np.any(np.isnan(Q)):
+				print("Detect NAN in Q")
+				break
 			#Backward pass with new regularization.
 			t0 = time.time()
 			K_closed_loop, k_open_loop, reg = self.backward_pass(

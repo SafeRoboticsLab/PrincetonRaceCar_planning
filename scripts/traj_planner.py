@@ -52,7 +52,6 @@ class TrajectoryPlanner():
             threading.Thread(target=self.policy_planning_thread).start()
         else:
             threading.Thread(target=self.receding_horizon_planning_thread).start()
-            
 
     def read_parameters(self):
         '''
@@ -129,8 +128,7 @@ class TrajectoryPlanner():
         Static obstacle callback function
         '''
         for obs in msg.markers:
-            id = obs.id
-            vertices = get_obstacle_vertices(obs)
+            id, vertices = get_obstacle_vertices(obs)
             self.static_obstacle_dict[id] = vertices
         
     def setup_service(self):
@@ -392,7 +390,7 @@ class TrajectoryPlanner():
                     self.planner.update_obstacles(vertices_list)
                     
                     # Replan use ilqr
-                    new_plan = self.planner.plan(state_cur[:-1], init_controls, verbose=True)
+                    new_plan = self.planner.plan(state_cur[:-1], init_controls, verbose=False)
                     
                     plan_status = new_plan['status']
                     if plan_status == -1:
@@ -413,7 +411,6 @@ class TrajectoryPlanner():
                         # publish the new policy for RVIZ visualization
                         self.trajectory_pub.publish(new_policy.to_msg())        
                         t_last_replan = t_cur
-                        
 
     def policy_planning_thread(self):
         '''

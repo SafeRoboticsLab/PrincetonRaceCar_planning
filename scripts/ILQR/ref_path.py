@@ -400,7 +400,7 @@ class RefPath:
             eps: Optional[float] = 1e-3) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
         
         if self.local_center_line is None:
-            # print("recaculate local centerline")
+            print("recaculate local centerline")
             s0, _ = self.center_line.projectPoint(points[:,0], eps=eps)
             self.local_s0 = s0*0.9
             self.local_s1 = min(s0+self.section_length/self.length, 1)
@@ -412,7 +412,7 @@ class RefPath:
         inital_error = d_local[0,0]**2 + d_local[1,0]**2
         
         recalculate = inital_error > 1.0 or \
-            (s_local[0]>0.5 and (self.local_s1-self.local_s0)*self.length>=self.section_length)
+            (s_local[0]>=0.5 and (self.local_s1-self.local_s0)*self.length>=self.section_length)
             
         if recalculate:
             self.local_center_line = None
