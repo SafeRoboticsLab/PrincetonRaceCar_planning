@@ -14,13 +14,13 @@ platform: "cpu" # "cpu" or "gpu" or "tpu"
 max_iter: 50 # maximum number of iterations
 # tolerance for the ILQR convergence
 # Make sure this is smaller than the minimum line search step size
-tol: 0.05
+tol: 0.01
 
 # line search parameters
 # We assume line search parameter is base**np.arange(a, b, c)
 line_search_base: 0.1
 line_search_a: -1 # line search parameter a
-line_search_b: 3 # line search parameter b
+line_search_b: 4 # line search parameter b
 line_search_c: 1 # line search parameter c
 
 # regularization parameters
