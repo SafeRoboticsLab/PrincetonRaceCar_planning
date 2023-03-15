@@ -278,7 +278,7 @@ class RefPathOriginal:
 class RefPath:
     def __init__(self, center_line: np.ndarray, width_left: Union[np.ndarray, float],
                     width_right: Union[np.ndarray, float], speed_limt: Union[np.ndarray, float],
-                    loop: Optional[bool] = True, section_length: float = 6.0) -> None:
+                    loop: Optional[bool] = True, section_length: float = 5.0) -> None:
         '''
         Considers a track with fixed width.
 
@@ -410,11 +410,11 @@ class RefPath:
         # project to local centerline
         s_local, d_local = self.local_center_line.projectPoint(points.T, eps=eps)
         
-        inital_error = d_local[0,0]**2 + d_local[1,0]**2
+        inital_error = d_local[0,0]**2 + d_local[0,1]**2
         
         recalculate = inital_error > 1.0 or \
-            (s_local[0]>=0.5 and (self.local_s1-self.local_s0)*self.length>=self.section_length)
-            
+            (s_local[0]>=0.5 and self.local_s1 <= 0.95)
+        # print(s_local, self.local_s0, self.local_s1, inital_error, recalculate)
         if recalculate:
             self.local_center_line = None
         
