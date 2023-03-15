@@ -23,10 +23,12 @@ class CollisionChecker:
                 np.array([-(self.length - self.wheelbase)/2.0, self.width/2.0, 100]),
                 np.array([-(self.length - self.wheelbase)/2.0, -self.width/2.0, 100]),
                 np.array([(self.length + self.wheelbase)/2.0, self.width/2.0, 100]),
+                np.array([(self.length + self.wheelbase)/2.0+0.15, self.width/2.0, 100]),
                 np.array([(self.length + self.wheelbase)/2.0, -self.width/2.0, 100]),
                 np.array([-(self.length - self.wheelbase)/2.0, self.width/2.0, -100]),
                 np.array([-(self.length - self.wheelbase)/2.0, -self.width/2.0, -100]),
                 np.array([(self.length + self.wheelbase)/2.0, self.width/2.0, -100]),
+                np.array([(self.length + self.wheelbase)/2.0+0.15, self.width/2.0, -100]),
                 np.array([(self.length + self.wheelbase)/2.0, -self.width/2.0, -100]),
             ]
         )
