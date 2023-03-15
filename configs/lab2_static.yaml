@@ -96,18 +96,18 @@ lat_accel_b: 2.0 # parameter for ExpLinear Cost
 
 # Progress Cost
 dim_progress: 4 # dimension of progress in the reference
-progress_weight: 1  # weight for the progress cost
+progress_weight: 0  # weight for the progress cost
 
 # Lane Boundary Cost
 dim_right_boundary: 5 # dimension of lane boundary in the reference
 dim_left_boundary: 6 # dimension of lane boundary in the reference
-lane_boundary_a: 50.0 # parameter for lane boundary cost
-lane_boundary_b: 5.0 # parameter for ExpLinear Cost
+lane_boundary_a: 100.0 # parameter for lane boundary cost
+lane_boundary_b: 10.0 # parameter for ExpLinear Cost
 
 ########        Control Cost          ############
 ctrl_cost_type: 'quadratic' # 'quadratic' or 'huber'
 # those value should not be too small
-ctrl_cost_accel_weight: 2.0
+ctrl_cost_accel_weight: 1.0
 ctrl_cost_steer_weight: 0.5
 ctrl_cost_accel_huber_delta: 1.0 # huber loss delta
 ctrl_cost_steer_huber_delta: 1.0 # huber loss delta

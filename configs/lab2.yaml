@@ -75,7 +75,7 @@ path_huber_delta: 2 # huber loss delta for path deviation cost
 
 # Velocity Cost
 vel_cost_type: 'quadratic' # 'quadratic' or 'huber'
-vel_weight: 3.0 # weight for the velocity cost
+vel_weight: 4.0 # weight for the velocity cost
 vel_huber_delta: 1 # huber loss delta for velocity cost
 
 # Speed Limit Cost
@@ -85,7 +85,7 @@ vel_limit_b: 1.0 # parameter for ExpLinear Cost
 
 # Heading Cost
 heading_cost_type: 'quadratic' # 'quadratic' or 'huber'
-heading_weight: 1  # weight for the heading cost
+heading_weight: 2  # weight for the heading cost
 heading_huber_delta: 1 # huber loss delta for heading cost
 
 # Lateral Acceleration Cost
