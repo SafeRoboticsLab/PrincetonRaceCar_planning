@@ -19,6 +19,7 @@ from tf.transformations import euler_from_quaternion
 from nav_msgs.msg import Odometry
 from nav_msgs.msg import Path as PathMsg # used to display the trajectory on RVIZ
 from std_srvs.srv import Empty, EmptyResponse
+from racecar_obs_detection.srv import GetFRS
 import queue
 
 class TrajectoryPlanner():
@@ -140,6 +141,8 @@ class TrajectoryPlanner():
         
         self.dyn_server = Server(plannerConfig, self.reconfigure_callback)
 
+        self.get_frs = rospy.ServiceProxy('/obstacles/get_frs', GetFRS)
+
     def start_planning_cb(self, req):
         '''
         ros service callback function for start planning
@@ -259,18 +262,19 @@ class TrajectoryPlanner():
             state_cur = None
             policy = self.policy_buffer.readFromRT()
             
-            t_act = rospy.get_rostime().to_sec()
+            if self.simulation:
+                t_act = rospy.get_rostime().to_sec()
+            else:
+                self.update_lock.acquire()
+                t_act = rospy.get_rostime().to_sec() + self.latency 
+                self.update_lock.release()
+            
 
             # check if there is new state available
             if self.control_state_buffer.new_data_available:
                 odom_msg = self.control_state_buffer.readFromRT()
                 
-                if self.simulation:
-                    t_slam = odom_msg.header.stamp.to_sec()
-                else:
-                    self.update_lock.acquire()
-                    t_act = rospy.get_rostime().to_sec() - self.latency 
-                    self.update_lock.release()
+                t_slam = odom_msg.header.stamp.to_sec()
                 
                 u = np.zeros(3)
                 u[-1] = t_slam
@@ -383,11 +387,23 @@ class TrajectoryPlanner():
                         new_path = self.path_buffer.readFromRT()
                         self.planner.update_ref_path(new_path)
                     
-                    # Update the obstacles
-                    vertices_list = []
+                    # Update the static obstacles
+                    obstacles_list = []
                     for vertices in self.static_obstacle_dict.values():
-                        vertices_list.append(vertices)
-                    self.planner.update_obstacles(vertices_list)
+                        obstacles_list.append(vertices)
+
+                    # update dynamic obstacles
+                    t_list= t_cur + np.arange(self.planner.T)*self.planner.dt
+                    frs_respond = self.get_frs(t_list)
+                    for frs in frs_respond.FRS: # A list of SetArray
+                        vertices_list = []
+                        for frs_t in frs.set_list: # A list of polygon in a setarry
+                            polygon = []
+                            for points in frs_t.points:
+                                polygon.append([points.x, points.y])
+                            vertices_list.append(np.array(polygon))
+                        obstacles_list.append(vertices_list)
+                    self.planner.update_obstacles(obstacles_list)
                     
                     # Replan use ilqr
                     new_plan = self.planner.plan(state_cur[:-1], init_controls, verbose=False)
