@@ -7,6 +7,7 @@ import os
 import time
 
 from utils import RealtimeBuffer, get_ros_param, Policy, GeneratePwm, get_obstacle_vertices
+from utils import frs_to_obstacle, frs_to_msg
 from ILQR import RefPath
 from ILQR import ILQR_np as ILQR
 
@@ -19,7 +20,7 @@ from tf.transformations import euler_from_quaternion
 from nav_msgs.msg import Odometry
 from nav_msgs.msg import Path as PathMsg # used to display the trajectory on RVIZ
 from std_srvs.srv import Empty, EmptyResponse
-from racecar_obs_detection.srv import GetFRS
+from racecar_obs_detection.srv import GetFRS, GetFRSResponse
 import queue
 
 class TrajectoryPlanner():
@@ -115,6 +116,9 @@ class TrajectoryPlanner():
 
         # Publisher for the control command
         self.control_pub = rospy.Publisher(self.control_topic, ServoMsg, queue_size=1)
+        
+        # Publisher for FRS visualization
+        self.frs_pub = rospy.Publisher('/vis/FRS', MarkerArray, queue_size=1)
 
     def setup_subscriber(self):
         '''
@@ -128,6 +132,9 @@ class TrajectoryPlanner():
         '''
         Static obstacle callback function
         '''
+        if self.simulation:
+            self.static_obstacle_dict.clear()
+            
         for obs in msg.markers:
             id, vertices = get_obstacle_vertices(obs)
             self.static_obstacle_dict[id] = vertices
@@ -391,18 +398,16 @@ class TrajectoryPlanner():
                     obstacles_list = []
                     for vertices in self.static_obstacle_dict.values():
                         obstacles_list.append(vertices)
-
                     # update dynamic obstacles
-                    t_list= t_cur + np.arange(self.planner.T)*self.planner.dt
-                    frs_respond = self.get_frs(t_list)
-                    for frs in frs_respond.FRS: # A list of SetArray
-                        vertices_list = []
-                        for frs_t in frs.set_list: # A list of polygon in a setarry
-                            polygon = []
-                            for points in frs_t.points:
-                                polygon.append([points.x, points.y])
-                            vertices_list.append(np.array(polygon))
-                        obstacles_list.append(vertices_list)
+                    try:
+                        t_list= t_cur + np.arange(self.planner.T)*self.planner.dt
+                        frs_respond = self.get_frs(t_list)
+                        obstacles_list.extend(frs_to_obstacle(frs_respond))
+                        self.frs_pub.publish(frs_to_msg(frs_respond))
+                    except:
+                        rospy.logwarn_once('FRS server not available!')
+                        frs_respond = None
+                        
                     self.planner.update_obstacles(obstacles_list)
                     
                     # Replan use ilqr
@@ -427,6 +432,8 @@ class TrajectoryPlanner():
                         # publish the new policy for RVIZ visualization
                         self.trajectory_pub.publish(new_policy.to_msg())        
                         t_last_replan = t_cur
+                    
+                    
 
     def policy_planning_thread(self):
         '''
