@@ -9,7 +9,7 @@ import time
 from utils import RealtimeBuffer, get_ros_param, Policy, GeneratePwm, get_obstacle_vertices
 from utils import frs_to_obstacle, frs_to_msg
 from ILQR import RefPath
-from ILQR import ILQR_np as ILQR
+from ILQR import ILQR_jax as ILQR
 
 from racecar_msgs.msg import ServoMsg, OdometryArray
 from racecar_planner.cfg import plannerConfig
@@ -30,7 +30,6 @@ class TrajectoryPlanner():
 
     def __init__(self):
         # Indicate if the planner is used to generate a new trajectory
-        
         self.update_lock = threading.Lock()
         self.latency = 0.0
         
@@ -103,7 +102,6 @@ class TrajectoryPlanner():
         self.control_state_buffer = RealtimeBuffer()
         self.policy_buffer = RealtimeBuffer()
         self.path_buffer = RealtimeBuffer()
-        self.obstacle_buffer = RealtimeBuffer()
         self.static_obstacle_dict = {}
         self.planner_ready = True
 
