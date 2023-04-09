@@ -1,2 +1,2 @@
-# Lab 2
+# Trajectory Planning usin iLQR and JAX
 
