@@ -5,7 +5,7 @@ import numpy as np
 from functools import partial
 import jax
 from jax import numpy as jnp
-from jaxlib.xla_extension import DeviceArray
+from jaxlib.xla_extension import ArrayImpl
 
 from .dynamics import Bicycle5D
 from .cost import Cost, CollisionChecker, Obstacle
@@ -222,10 +222,10 @@ class ILQR_jax():
 		return solver_info
 
 	def forward_pass(
-			self, nominal_states: DeviceArray, nominal_controls: DeviceArray,
-			K_closed_loop: DeviceArray, k_open_loop: DeviceArray, alpha: float
-	) -> Tuple[DeviceArray, DeviceArray, float, DeviceArray, DeviceArray,
-			DeviceArray]:
+			self, nominal_states: ArrayImpl, nominal_controls: ArrayImpl,
+			K_closed_loop: ArrayImpl, k_open_loop: ArrayImpl, alpha: float
+	) -> Tuple[ArrayImpl, ArrayImpl, float, ArrayImpl, ArrayImpl,
+			ArrayImpl]:
 		X, U = self.rollout(
 				nominal_states, nominal_controls, K_closed_loop, k_open_loop, alpha
 		)
@@ -239,26 +239,26 @@ class ILQR_jax():
 
 	@partial(jax.jit, static_argnums=(0,))
 	def backward_pass(
-			self, q: DeviceArray, r: DeviceArray, Q: DeviceArray,
-			R: DeviceArray, H: DeviceArray, A: DeviceArray, B: DeviceArray,
-			fxx: DeviceArray, fuu: DeviceArray, fux: DeviceArray, 
+			self, q: ArrayImpl, r: ArrayImpl, Q: ArrayImpl,
+			R: ArrayImpl, H: ArrayImpl, A: ArrayImpl, B: ArrayImpl,
+			fxx: ArrayImpl, fuu: ArrayImpl, fux: ArrayImpl, 
 			reg: float, ddp: bool = True
-	) -> Tuple[DeviceArray, DeviceArray]:
+	) -> Tuple[ArrayImpl, ArrayImpl]:
 		"""
 		Jitted backward pass looped computation.
 
 		Args:
-				q (DeviceArray): (dim_x, N)
-				r (DeviceArray): (dim_u, N)
-				Q (DeviceArray): (dim_x, dim_x, N)
-				R (DeviceArray): (dim_u, dim_u, N)
-				H (DeviceArray): (dim_u, dim_x, N)
-				A (DeviceArray): (dim_x, dim_x, N-1)
-				B (DeviceArray): (dim_x, dim_u, N-1)
+				q (ArrayImpl): (dim_x, N)
+				r (ArrayImpl): (dim_u, N)
+				Q (ArrayImpl): (dim_x, dim_x, N)
+				R (ArrayImpl): (dim_u, dim_u, N)
+				H (ArrayImpl): (dim_u, dim_x, N)
+				A (ArrayImpl): (dim_x, dim_x, N-1)
+				B (ArrayImpl): (dim_x, dim_u, N-1)
 
 		Returns:
-				Ks (DeviceArray): gain matrices (dim_u, dim_x, N - 1)
-				ks (DeviceArray): gain vectors (dim_u, N - 1)
+				Ks (ArrayImpl): gain matrices (dim_u, dim_x, N - 1)
+				ks (ArrayImpl): gain vectors (dim_u, N - 1)
 		"""
 		def init():
 			Ks = jnp.zeros((self.dim_u, self.dim_x, self.T - 1))
@@ -324,9 +324,9 @@ class ILQR_jax():
 
 	@partial(jax.jit, static_argnums=(0,))
 	def rollout(
-			self, nominal_states: DeviceArray, nominal_controls: DeviceArray,
-			K_closed_loop: DeviceArray, k_open_loop: DeviceArray, alpha: float
-	) -> Tuple[DeviceArray, DeviceArray]:
+			self, nominal_states: ArrayImpl, nominal_controls: ArrayImpl,
+			K_closed_loop: ArrayImpl, k_open_loop: ArrayImpl, alpha: float
+	) -> Tuple[ArrayImpl, ArrayImpl]:
 
 		@jax.jit
 		def _rollout_step(t, args):

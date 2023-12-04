@@ -6,7 +6,7 @@
     <arg name="traj_topic"          default="/Planning/Trajectory"  doc="ROS topic for trajectory"/>
     <arg name="path_topic"          default="/Routing/Path"         doc="ROS topic for reference path"/>
     <arg name="pub_rate"            default="20"                    doc="rate at which to publish the pose"/>
-    <arg name="receding_horizon"    default="false"                 doc="whether to use open loop planner"/>
+    <arg name="receding_horizon"    default="true"                 doc="whether to use open loop planner"/>
     <arg name="init_x"              default="2"                     doc="initial x position"/>
     <arg name="init_y"              default="0.15"                  doc="initial y position"/>
     <arg name="init_yaw"            default="0"                     doc="initial z position"/>
