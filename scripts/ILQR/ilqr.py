@@ -194,17 +194,17 @@ class ILQR():
 	
 		return K_closed_loop, k_open_loop, last_reg
 
-	def roll_out(self, X_0, U_0, K_closed_loop, k_open_loop, alpha):
-		state = np.zeros_like(X_0)
-		control = np.zeros_like(U_0)
+	def forward_pass(self, x_bar, u_bar, K_closed_loop, k_open_loop, alpha):
+		state = np.zeros_like(x_bar)
+		control = np.zeros_like(u_bar)
         
-		state[:,0] = X_0[:,0]
+		state[:,0] = x_bar[:,0]
 		T = self.T
 		
 		for t in range(T-1):
 			K = K_closed_loop[:,:,t]
 			k = k_open_loop[:,t]
-			error = state[:, t] - X_0[:, t]
+			error = state[:, t] - x_bar[:, t]
 			error[3] = np.arctan2(np.sin(error[3]), np.cos(error[3]))
 			# THETA_INDX = 3
 			# if error[THETA_INDX] < -np.pi:
@@ -212,7 +212,7 @@ class ILQR():
 			# elif error[THETA_INDX] > np.pi:
 			# 	error[THETA_INDX] -= 2*np.pi
     
-			control[:,t] = U_0[:,t]+ alpha*k + K @ (error)
+			control[:,t] = u_bar[:,t]+ alpha*k + K @ (error)
 			state[:,t+1], control[:,t] = self.dyn.integrate_forward_np(state[:,t], control[:,t])
 			
 		return state, control
