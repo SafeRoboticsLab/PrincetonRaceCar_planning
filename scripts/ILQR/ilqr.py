@@ -297,8 +297,8 @@ class ILQR():
 		# 	controls: np.ndarray, (dim_u, T) controls along the trajectory.
 
 		# Returns:
-		# 	A: np.ndarray, (dim_x, T) the Jacobian of the dynamics w.r.t. the state.
-		# 	B: np.ndarray, (dim_u, T) the Jacobian of the dynamics w.r.t. the control.
+		# 	A: np.ndarray, (dim_x, dim_x, T) the Jacobian of the dynamics w.r.t. the state.
+		# 	B: np.ndarray, (dim_u, dim_u, T) the Jacobian of the dynamics w.r.t. the control.
 		
 		# ******** Functions to roll the dynamics for one step  ************
 		# state_next, control_clip = self.dyn.integrate_forward_np(state, control)
@@ -348,9 +348,9 @@ class ILQR():
 				t_process=t_process, # Time spent on planning
 				trajectory = trajectory,
 				controls = controls,
-				status=None, #	TODO: Fill this in
-				K_closed_loop=None, # TODO: Fill this in
-				k_open_loop=None # TODO: Fill this in
+				status=status, #	TODO: Fill this in
+				K_closed_loop=K_closed_loop, # TODO: Fill this in
+				k_open_loop=k_open_loop # TODO: Fill this in
 				# Optional TODO: Fill in other information you want to return
 		)
 		return solver_info
