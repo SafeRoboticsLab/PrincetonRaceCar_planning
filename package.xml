@@ -1,20 +1,37 @@
 <?xml version="1.0"?>
-<package format="2">
+<package format="3">
   <name>racecar_planner</name>
   <version>0.1.0</version>
-  <description>The traj_tracking_ros package</description>
+  <description>The racecar planner package (ROS2)</description>
 
   <maintainer email="zixuz@princeton.edu">Zixu Zhang</maintainer>
   <license>BSD</license>
 
-  <author >Zixu Zhang</author>
+  <author>Zixu Zhang</author>
 
+  <!-- Build system for Python packages -->
+  <buildtool_depend>ament_python</buildtool_depend>
 
-  <buildtool_depend>catkin</buildtool_depend>
+  <!-- Core ROS2 dependencies -->
+  <exec_depend>rclpy</exec_depend>
+  <exec_depend>std_msgs</exec_depend>
+  <exec_depend>nav_msgs</exec_depend>
+  <exec_depend>racecar_msgs</exec_depend> <!-- Ensure this exists in ROS2 -->
 
-  <depend>rospy</depend>
-  <depend>std_msgs</depend>
-  <depend>racecar_msgs</depend>
-  <depend>dynamic_reconfigure</depend>
-  <depend>nav_msgs</depend>
+  <!-- Optional: Include launch support -->
+  <exec_depend>launch</exec_depend>
+  <exec_depend>launch_ros</exec_depend>
+
+  <!-- Python installation helpers -->
+  <exec_depend>ament_copyright</exec_depend>
+  <exec_depend>ament_flake8</exec_depend>
+  <exec_depend>ament_pep257</exec_depend>
+  <exec_depend>python3-setuptools</exec_depend>
+
+  <!-- If using parameter descriptors -->
+  <exec_depend>rcl_interfaces</exec_depend>
+
+  <export>
+    <build_type>ament_python</build_type>
+  </export>
 </package>
