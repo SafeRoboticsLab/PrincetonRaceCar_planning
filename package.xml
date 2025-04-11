@@ -2,33 +2,41 @@
 <package format="3">
   <name>racecar_planner</name>
   <version>0.1.0</version>
-  <description>The racecar planner package (ROS2)</description>
+  <description>iLQR-based planner for autonomous racecar (ROS 2)</description>
 
   <maintainer email="zixuz@princeton.edu">Zixu Zhang</maintainer>
-  <license>BSD</license>
-
   <author>Zixu Zhang</author>
+  <license>BSD</license>
 
   <!-- Build system for Python packages -->
   <buildtool_depend>ament_python</buildtool_depend>
 
-  <!-- Core ROS2 dependencies -->
+  <!-- Core ROS 2 Python dependencies -->
   <exec_depend>rclpy</exec_depend>
   <exec_depend>std_msgs</exec_depend>
   <exec_depend>nav_msgs</exec_depend>
-  <exec_depend>racecar_msgs</exec_depend> <!-- Ensure this exists in ROS2 -->
+  <exec_depend>geometry_msgs</exec_depend>
+  <exec_depend>visualization_msgs</exec_depend>
+  <exec_depend>std_srvs</exec_depend>
 
-  <!-- Optional: Include launch support -->
+  <!-- Custom racecar message packages -->
+  <exec_depend>racecar_msgs</exec_depend>
+  <exec_depend>racecar_obs_detection</exec_depend>
+
+  <!-- TF utilities (Python version of tf) -->
+  <exec_depend>tf_transformations</exec_depend>
+
+  <!-- Launch system -->
   <exec_depend>launch</exec_depend>
   <exec_depend>launch_ros</exec_depend>
 
-  <!-- Python installation helpers -->
+  <!-- Python package support -->
   <exec_depend>ament_copyright</exec_depend>
   <exec_depend>ament_flake8</exec_depend>
   <exec_depend>ament_pep257</exec_depend>
   <exec_depend>python3-setuptools</exec_depend>
 
-  <!-- If using parameter descriptors -->
+  <!-- Parameter descriptor support -->
   <exec_depend>rcl_interfaces</exec_depend>
 
   <export>
