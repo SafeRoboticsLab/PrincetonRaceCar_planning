@@ -1,27 +1,27 @@
-import rospy
+import rclpy
+from rclpy.node import Node
+from typing import Any
 
-def get_ros_param(param_name: str, default):
-    '''
-    Read a parameter from the ROS parameter server. If the parameter does not exist, return the default value.
+def get_ros_param(node: Node, param_name: str, default: Any) -> Any:
+    """
+    Retrieve a parameter from a ROS2 Node. If the parameter is not declared yet,
+    declare it with a default value and return the default.
+
     Args:
-        param_name: string, name of the parameter
-        default: default value
-    Return:
-        value of the parameter
-    '''
-    if rospy.has_param(param_name):
-        return rospy.get_param(param_name)
-    else:
-        # try seach parameter
-        if param_name[0] == '~':
-            search_param_name = rospy.search_param(param_name[1:])
-        else:
-            search_param_name = rospy.search_param(param_name)
+        node (rclpy.node.Node): The node to access parameters from.
+        param_name (str): The name of the parameter to retrieve.
+        default (Any): The default value to use if parameter is undeclared.
 
-        if search_param_name is not None:
-            rospy.loginfo('Parameter %s not found, search found %s, using it', param_name, search_param_name)
-            return rospy.get_param(search_param_name)
-        else:
-            rospy.logwarn("Parameter '%s' not found, using default: %s", param_name, default)
-            return default
+    Returns:
+        Any: The parameter value.
+    """
+    if not node.has_parameter(param_name):
+        # Declare the parameter with a default if it hasn't been declared yet
+        node.declare_parameter(param_name, default)
+        node.get_logger().info(
+            f"Parameter '{param_name}' not declared. Declaring with default value: {default}"
+        )
 
+    value = node.get_parameter(param_name).value
+    node.get_logger().info(f"Parameter '{param_name}' loaded with value: {value}")
+    return value
